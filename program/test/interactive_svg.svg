@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="200" height="200"><rect x="10" y="10" width="180" height="180" fill="blue" onclick="toggleText()" /><text x="50" y="100" fill="red" font_size="20" id="displayText" visibility="hidden">Hello World</text><script type="application/ecmascript">
+function toggleText() {
+  var textElement = document.getElementById('displayText');
+  if (textElement.getAttribute('visibility') === 'hidden') {
+    textElement.setAttribute('visibility', 'visible');
+  } else {
+    textElement.setAttribute('visibility', 'hidden');
+  }
+}
+</script></svg>
