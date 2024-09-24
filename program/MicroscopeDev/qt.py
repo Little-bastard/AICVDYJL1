@@ -285,7 +285,7 @@ class MainWidget(QWidget):
         if self.hcam:
             if toupcam.TOUPCAM_EVENT_IMAGE == nEvent:
                 self.handleImageEvent()
-            elif toupcam.TOUPCAM_EVENT_EXPOSURE == nEvent:
+            if toupcam.TOUPCAM_EVENT_EXPOSURE == nEvent:
                 self.handleExpoEvent()
             elif toupcam.TOUPCAM_EVENT_TEMPTINT == nEvent:
                 self.handleTempTintEvent()

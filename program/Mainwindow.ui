@@ -27,7 +27,7 @@
   </property>
   <property name="windowIcon">
    <iconset>
-    <normaloff>icon/aicvd.ico</normaloff>icon/aicvd.ico</iconset>
+    <normaloff>C:/Users/LuoJie/.designer/backup/icon/aicvd.ico</normaloff>C:/Users/LuoJie/.designer/backup/icon/aicvd.ico</iconset>
   </property>
   <widget class="QWidget" name="centralwidget">
    <property name="sizePolicy">
@@ -53,8 +53,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>2631</width>
-         <height>1056</height>
+         <width>2627</width>
+         <height>1037</height>
         </rect>
        </property>
        <layout class="QHBoxLayout" name="horizontalLayout_17">
@@ -177,7 +177,7 @@
                      <item>
                       <layout class="QHBoxLayout" name="horizontalLayout_45">
                        <item>
-                        <widget class="QPushButton" name="BT_download_result">
+                        <widget class="QPushButton" name="BT_launch_experiment">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                            <horstretch>0</horstretch>
@@ -191,16 +191,22 @@
                           </size>
                          </property>
                          <property name="text">
-                          <string>保存结果</string>
+                          <string>启动实验</string>
                          </property>
                         </widget>
                        </item>
                        <item>
-                        <widget class="QLabel" name="lbl_result">
-                         <property name="text">
-                          <string/>
+                        <spacer name="horizontalSpacer_8">
+                         <property name="orientation">
+                          <enum>Qt::Horizontal</enum>
                          </property>
-                        </widget>
+                         <property name="sizeHint" stdset="0">
+                          <size>
+                           <width>40</width>
+                           <height>20</height>
+                          </size>
+                         </property>
+                        </spacer>
                        </item>
                        <item>
                         <widget class="QLabel" name="label_21">
@@ -854,7 +860,7 @@
                           <item>
                            <layout class="QHBoxLayout" name="horizontalLayout_10">
                             <item>
-                             <widget class="QSpinBox" name="SB_mfc_sv">
+                             <widget class="QDoubleSpinBox" name="SB_mfc_sv">
                               <property name="sizePolicy">
                                <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                                 <horstretch>0</horstretch>
@@ -3902,48 +3908,6 @@
                          </property>
                          <layout class="QVBoxLayout" name="verticalLayout_31">
                           <item>
-                           <layout class="QHBoxLayout" name="horizontalLayout_41">
-                            <item>
-                             <widget class="QLabel" name="label_19">
-                              <property name="sizePolicy">
-                               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                                <horstretch>0</horstretch>
-                                <verstretch>0</verstretch>
-                               </sizepolicy>
-                              </property>
-                              <property name="minimumSize">
-                               <size>
-                                <width>60</width>
-                                <height>23</height>
-                               </size>
-                              </property>
-                              <property name="text">
-                               <string>瞬时流量：</string>
-                              </property>
-                             </widget>
-                            </item>
-                            <item>
-                             <widget class="QLabel" name="lbl_mfc_pv">
-                              <property name="sizePolicy">
-                               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
-                                <horstretch>0</horstretch>
-                                <verstretch>0</verstretch>
-                               </sizepolicy>
-                              </property>
-                              <property name="minimumSize">
-                               <size>
-                                <width>40</width>
-                                <height>20</height>
-                               </size>
-                              </property>
-                              <property name="text">
-                               <string/>
-                              </property>
-                             </widget>
-                            </item>
-                           </layout>
-                          </item>
-                          <item>
                            <layout class="QHBoxLayout" name="horizontalLayout_42">
                             <item>
                              <widget class="QLabel" name="label_20">
@@ -3966,6 +3930,48 @@
                             </item>
                             <item>
                              <widget class="QLabel" name="lbl_mfc_sv">
+                              <property name="sizePolicy">
+                               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                                <horstretch>0</horstretch>
+                                <verstretch>0</verstretch>
+                               </sizepolicy>
+                              </property>
+                              <property name="minimumSize">
+                               <size>
+                                <width>40</width>
+                                <height>20</height>
+                               </size>
+                              </property>
+                              <property name="text">
+                               <string/>
+                              </property>
+                             </widget>
+                            </item>
+                           </layout>
+                          </item>
+                          <item>
+                           <layout class="QHBoxLayout" name="horizontalLayout_41">
+                            <item>
+                             <widget class="QLabel" name="label_19">
+                              <property name="sizePolicy">
+                               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                                <horstretch>0</horstretch>
+                                <verstretch>0</verstretch>
+                               </sizepolicy>
+                              </property>
+                              <property name="minimumSize">
+                               <size>
+                                <width>60</width>
+                                <height>23</height>
+                               </size>
+                              </property>
+                              <property name="text">
+                               <string>瞬时流量：</string>
+                              </property>
+                             </widget>
+                            </item>
+                            <item>
+                             <widget class="QLabel" name="lbl_mfc_pv">
                               <property name="sizePolicy">
                                <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
                                 <horstretch>0</horstretch>
@@ -4057,8 +4063,14 @@
                                  <verstretch>0</verstretch>
                                 </sizepolicy>
                                </property>
+                               <property name="minimumSize">
+                                <size>
+                                 <width>80</width>
+                                 <height>23</height>
+                                </size>
+                               </property>
                                <property name="text">
-                                <string>TextLabel</string>
+                                <string/>
                                </property>
                                <property name="alignment">
                                 <set>Qt::AlignCenter</set>
@@ -4117,8 +4129,14 @@ color: rgb(0, 0, 0);</string>
                               <verstretch>0</verstretch>
                              </sizepolicy>
                             </property>
+                            <property name="minimumSize">
+                             <size>
+                              <width>80</width>
+                              <height>23</height>
+                             </size>
+                            </property>
                             <property name="text">
-                             <string>TextLabel</string>
+                             <string/>
                             </property>
                            </widget>
                           </item>
@@ -4424,7 +4442,7 @@ color: rgb(0, 0, 0);</string>
      <x>0</x>
      <y>0</y>
      <width>2651</width>
-     <height>22</height>
+     <height>26</height>
     </rect>
    </property>
   </widget>

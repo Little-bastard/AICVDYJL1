@@ -78,7 +78,7 @@ class TempWorker(QThread):
                         print(f'data: {[data.Value, data.iDevAdd, data.iParamNo]}')
                         self.write_comm(data)
                 while True:
-                    if self.program_req.empty():
+                    if self.program_req.empty() or not self.data_queue.empty():
                         break
                     data = self.program_req.get()
                     program = self.read_program()

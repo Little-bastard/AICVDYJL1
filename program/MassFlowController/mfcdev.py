@@ -53,6 +53,7 @@ class MFCComm:
         buffer = bytearray(7)
         self.MyCom.readinto(buffer)
         if self.CheckResult(buffer):
+            print(f'({buffer[3]} * 256 + {buffer[4]})*{self.factors[id]}={round((buffer[3] * 256 + buffer[4]) * self.factors[id], 1)}')
             return round((buffer[3] * 256 + buffer[4]) * self.factors[id], 1)
         return None
 

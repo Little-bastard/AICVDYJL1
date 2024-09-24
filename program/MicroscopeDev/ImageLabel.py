@@ -55,7 +55,7 @@ class DrawableLabel(QLabel):
         painter.setPen(QPen(Qt.black, 2, Qt.SolidLine, Qt.RoundCap))
         if self.start_point:
             current_pos = self.mapFromGlobal(QCursor.pos())
-            painter.setPen(QPen(Qt.gray))
+            painter.setPen(QPen(Qt.black))
             painter.drawLine(self.start_point, current_pos)
             length = self.calculate_distance(self.start_point, current_pos) * self.coefficient
             if length != 0:
@@ -67,7 +67,7 @@ class DrawableLabel(QLabel):
     def draw_length(self, painter, length, position):
         font = painter.font()
         font.setPointSize(12)
-        painter.setPen(QPen(Qt.gray))
+        painter.setPen(QPen(Qt.black))
         painter.setFont(font)
         fm = QFontMetrics(font)
         text = f"{length:.2f}"

@@ -58,6 +58,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
+        self.IsLaunched = None
+        self.IsThresholdSet = None
         self.total_order = None
         self.IsResultSaved = None
         self.IsExpEnd = None
@@ -70,7 +72,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.order = None
         self.cfg_file = None
         self.line_len = 0
-        self.counter = 10
+        self.counter = 180
         self.startCounting = False
         self.restartFlag = False
         self.showSettings = False
@@ -84,11 +86,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.widget_mag.hide()
         self.BT_select_cfg.clicked.connect(self.onSelectConfigFile)
         self.BT_apply_cfg.clicked.connect(self.onApplyConfiguration)
-        self.BT_download_result.clicked.connect(self.onSaveResult)
+        self.BT_launch_experiment.clicked.connect(self.onLaunchExperiment)
         self.lbl_cfg.enterEvent = self.showCfgTooltip
         self.lbl_cfg.leaveEvent = self.hideCfgTooltip
-        self.lbl_result.enterEvent = self.showResultTooltip
-        self.lbl_result.leaveEvent = self.hideResultTooltip
 
         self.setWindowTitle('AICVD')
         self.selected_color = "background-color: rgba(85, 170, 255, 50); border: 1px solid rgba(0, 85, 255, 220); padding: 4px;border-radius: 4px"
@@ -102,15 +102,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 显示工具提示
         QToolTip.showText(event.globalPos(), self.lbl_cfg.toolTip(), self.lbl_cfg)
 
-    def showResultTooltip(self, event):
-        # 显示工具提示
-        QToolTip.showText(event.globalPos(), self.lbl_result.toolTip(), self.lbl_result)
-
     def hideCfgTooltip(self, event):
-        # 隐藏工具提示
-        QToolTip.hideText()
-
-    def hideResultTooltip(self, event):
         # 隐藏工具提示
         QToolTip.hideText()
 
@@ -123,6 +115,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.lbl_cfg.setToolTip(file_path)
             self.cfg_file = file_path
             print(f'select config file: {file_path}')
+            self.BT_apply_cfg.setChecked(False)
+            self.BT_apply_cfg.setStyleSheet(self.default_color)
 
     def onApplyConfiguration(self):
         if self.cfg_file:
@@ -136,18 +130,36 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             with open(f'{config_directory_path}/profile.json', 'w', encoding='utf-8') as profile:
                 json.dump(current_profile, profile, ensure_ascii=False, indent=4)
             print(f'snap configuration: {current_profile}')
-            # 获取总轮次数
-            df = pd.read_excel(self.cfg_file, sheet_name='Sheet1')
-            self.total_order = df['Order'].max()
             # 创建一个只有表头的空Excel表用于保存每轮实验的结果
+            df = pd.read_excel(self.cfg_file, sheet_name='Sheet1')
             columns = df.columns.tolist() + ["Video_name", "Date"]
             df_new = pd.DataFrame(columns=columns)
             current_time = datetime.now().strftime("%Y%m%d%H%M%S")
             filename = f'result_{current_time}.xlsx'
             self.result_filepath = os.path.join(result_directory_path, filename)
             df_new.to_excel(self.result_filepath, index=False)
-            # 开始实验
+
+    def onLaunchExperiment(self):
+        if self.IsLaunched:
+            self.stop_experiment()
+        else:
             self.start_experiment()
+
+    def stop_experiment(self):
+        # 停止录像
+        self.stop_recording()
+        # 停止温控
+        self.onStopA()
+        self.onStopB()
+        # 停止流量计
+        for idev in range(self.mfc_dev_num):
+            if self.worker_mfc:
+                self.worker_mfc.write_data('switch',
+                                           MFCInputData(value=True, id=idev, addr=0))
+        self.IsLaunched = False
+        self.BT_launch_experiment.setText("启动实验")
+        print(f'停止实验')
+
 
     def start_experiment(self):
         try:
@@ -160,6 +172,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if self.cfg_file:
                 # 读取每一个参数
                 df = pd.read_excel(self.cfg_file, sheet_name='Sheet1')
+                # 获取总轮次
+                self.total_order = df['Order'].max()
                 self.params = df[df['Order'] == self.order].reset_index(drop=True)
                 print(f'当前轮次（轮次{self.order}）配置参数: {self.params}')
                 self.temperature_program_name_a = self.params['A'].iloc[0]
@@ -204,12 +218,15 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # 设置实验开始标志位
                 self.IsExpEnd = False
                 self.is_final_step_b = False
+                self.IsLaunched = True
 
-                # 显示当前轮次
+                self.BT_launch_experiment.setText("停止实验")
                 self.lbl_order.setText(f'{self.order}/{self.total_order}')
 
                 # 清洗MFC
                 self.cleanMFC()
+
+                print(f'启动实验')
         except Exception as e:
             print(e)
 
@@ -284,8 +301,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f'133333333333333333')
             updated_df.to_excel(self.result_filepath, index=False)
             print(f'结果已保存')
-            self.lbl_result.setText(str(Path(self.result_filepath).name))
-            self.lbl_result.setToolTip(str(self.result_filepath))
         except Exception as e:
             print(f'An error occurred when save result: {e}')
 
@@ -1498,14 +1513,33 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f'An error occurred when close temp: {e}')
 
     def onSetTempThreshold(self):
-        temp_threshold_low = self.SB_temp_threshold_low.text()
-        temp_threshold_high = self.SB_temp_threshold_high.text()
-        if temp_threshold_low and temp_threshold_high:
-            self.temp_threshold_low = int(temp_threshold_low)
-            self.temp_threshold_high = int(temp_threshold_high)
-        print(f'set temp threshold: {self.temp_threshold_low} - {self.temp_threshold_high}')
-        self.BT_set_temp_threshold.setChecked(True)
-        self.BT_set_temp_threshold.setStyleSheet(self.selected_color)
+        if self.IsThresholdSet:
+            self.cancel_threshold()
+        else:
+            self.set_threshold()
+
+    def set_threshold(self):
+        try:
+            temp_threshold_low = self.SB_temp_threshold_low.text()
+            temp_threshold_high = self.SB_temp_threshold_high.text()
+            if temp_threshold_low and temp_threshold_high:
+                self.temp_threshold_low = int(temp_threshold_low)
+                self.temp_threshold_high = int(temp_threshold_high)
+                print(f'set temp threshold: {self.temp_threshold_low} - {self.temp_threshold_high}')
+            self.BT_set_temp_threshold.setChecked(True)
+            self.BT_set_temp_threshold.setText("取消设定")
+            self.IsThresholdSet = True
+        except Exception as e:
+            print(f'An error occurred when set temp threshold: {e}')
+
+    def cancel_threshold(self):
+        self.BT_set_temp_threshold.setChecked(False)
+        self.BT_set_temp_threshold.setText("设定")
+        self.temp_threshold_low = None
+        self.temp_threshol_high = None
+        self.SB_temp_threshold_low.clear()
+        self.SB_temp_threshold_high.clear()
+        self.IsThresholdSet = False
 
     def onConnectSignalComm(self):
         if self.rtu_server:
@@ -1535,6 +1569,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.rtu_server = None
         self.slave = None
         self.signal_comm = None
+        self.cancel_threshold()
         self.BT_set_temp_threshold.setEnabled(False)
         self.BT_sendSignal.setEnabled(False)
         self.SB_temp_threshold_low.clear()
@@ -1658,9 +1693,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         return q_image
 
     def updateTempData(self):
-        # 读取设备参数
-        # self.readTempParameter()
-        # 将获取到的温度值显示在QLineEdit中
+        # 将温度值显示在QLineEdit中
         ctime = time.time()
         if self.tempdevData[0]:
             self.lbl_pv_a.setText(str(self.tempdevData[0].pv))
@@ -1717,6 +1750,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 # 绘制ZoneA温度曲线
                 if self.total_set_time_a and self.total_set_time_b:
                     self.temp_time_range = max(self.total_set_time_a, self.total_set_time_b) * 60
+                    print(f'temp_time_range: {self.temp_time_range}')
                 x_data_pv_a, y_data_pv_a = self.line_pv_a.get_data()
                 if len(x_data_pv_a) > self.temp_time_range * self.temp_fps:
                     x_data_pv_a = []
@@ -1810,8 +1844,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(e)
 
     def cleanMFC(self):
-        # 清洗10秒
-        self.counter = 10
+        # 清洗180秒
+        self.counter = 180
         self.onSwitchClean()
         self.startCounting = True
 
@@ -1888,18 +1922,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 刷新比例尺和显微图像尺寸
         self.onMagnificationChanged()
         # 实验前先清洗MFC设备{self.counter}秒
-        if self.startCounting:
-            self.counter = self.counter - 1
-            print(f'清洗倒计时：{self.counter}')
-        if self.counter <= 0:
-            self.startCounting = False
-            self.counter = 10
-            # 清洗完后先关闭所有流量计阀门
-            if self.worker_mfc:
-                self.worker_mfc.write_data('switch',
-                                           MFCInputData(value=True, id=self.button_group.checkedId(), addr=0))
-            # 再启动所有设备
-            self.onRunAll()
+        if self.IsLaunched:
+            if self.startCounting:
+                self.counter = self.counter - 1
+                print(f'清洗倒计时：{self.counter}')
+            if self.counter <= 0:
+                self.startCounting = False
+                self.counter = 180
+                # 清洗完后先关闭所有流量计阀门
+                if self.worker_mfc:
+                    self.worker_mfc.write_data('switch',
+                                               MFCInputData(value=True, id=self.button_group.checkedId(), addr=0))
+                # 再启动所有设备
+                self.onRunAll()
 
         # 判断实验是否结束，发送信号
         if self.tempdevData[0]:
@@ -1918,19 +1953,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     self.onSendDefaultSignal()
 
         if self.IsExpEnd and not self.IsResultSaved:
-            # 停止录像
-            self.stop_recording()
-            # 停止温控
-            self.onStopA()
-            self.onStopB()
-            # 停止流量计
-            for idev in range(self.mfc_dev_num):
-                if self.worker_mfc:
-                    self.worker_mfc.write_data('switch',
-                                               MFCInputData(value=True, id=idev, addr=0))
             # 保存结果
             self.onSaveResult()
             self.IsResultSaved = True
+            # 停止本轮实验
+            self.stop_experiment()
 
         if self.slave and self.tempdevData[0] and self.tempdevData[1]:
             try:
