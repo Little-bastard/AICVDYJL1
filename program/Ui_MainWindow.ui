@@ -53,8 +53,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>2627</width>
-         <height>1037</height>
+         <width>2631</width>
+         <height>1056</height>
         </rect>
        </property>
        <layout class="QHBoxLayout" name="horizontalLayout_17">
@@ -177,38 +177,6 @@
                      <item>
                       <layout class="QHBoxLayout" name="horizontalLayout_45">
                        <item>
-                        <widget class="QPushButton" name="BT_launch_experiment">
-                         <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                           <horstretch>0</horstretch>
-                           <verstretch>0</verstretch>
-                          </sizepolicy>
-                         </property>
-                         <property name="minimumSize">
-                          <size>
-                           <width>80</width>
-                           <height>23</height>
-                          </size>
-                         </property>
-                         <property name="text">
-                          <string>启动实验</string>
-                         </property>
-                        </widget>
-                       </item>
-                       <item>
-                        <spacer name="horizontalSpacer_8">
-                         <property name="orientation">
-                          <enum>Qt::Horizontal</enum>
-                         </property>
-                         <property name="sizeHint" stdset="0">
-                          <size>
-                           <width>40</width>
-                           <height>20</height>
-                          </size>
-                         </property>
-                        </spacer>
-                       </item>
-                       <item>
                         <widget class="QLabel" name="label_21">
                          <property name="sizePolicy">
                           <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
@@ -224,6 +192,9 @@
                          </property>
                          <property name="text">
                           <string>当前轮次：</string>
+                         </property>
+                         <property name="alignment">
+                          <set>Qt::AlignCenter</set>
                          </property>
                         </widget>
                        </item>
@@ -243,6 +214,38 @@
                          </property>
                          <property name="text">
                           <string/>
+                         </property>
+                        </widget>
+                       </item>
+                       <item>
+                        <spacer name="horizontalSpacer_8">
+                         <property name="orientation">
+                          <enum>Qt::Horizontal</enum>
+                         </property>
+                         <property name="sizeHint" stdset="0">
+                          <size>
+                           <width>40</width>
+                           <height>20</height>
+                          </size>
+                         </property>
+                        </spacer>
+                       </item>
+                       <item>
+                        <widget class="QPushButton" name="BT_launch_experiment">
+                         <property name="sizePolicy">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                           <horstretch>0</horstretch>
+                           <verstretch>0</verstretch>
+                          </sizepolicy>
+                         </property>
+                         <property name="minimumSize">
+                          <size>
+                           <width>80</width>
+                           <height>23</height>
+                          </size>
+                         </property>
+                         <property name="text">
+                          <string>启动实验</string>
                          </property>
                         </widget>
                        </item>
@@ -3901,7 +3904,7 @@
                        <item>
                         <widget class="QWidget" name="widget_2" native="true">
                          <property name="sizePolicy">
-                          <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
+                          <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
@@ -3931,7 +3934,7 @@
                             <item>
                              <widget class="QLabel" name="lbl_mfc_sv">
                               <property name="sizePolicy">
-                               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                                 <horstretch>0</horstretch>
                                 <verstretch>0</verstretch>
                                </sizepolicy>
@@ -3973,7 +3976,7 @@
                             <item>
                              <widget class="QLabel" name="lbl_mfc_pv">
                               <property name="sizePolicy">
-                               <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+                               <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
                                 <horstretch>0</horstretch>
                                 <verstretch>0</verstretch>
                                </sizepolicy>
@@ -4442,7 +4445,7 @@ color: rgb(0, 0, 0);</string>
      <x>0</x>
      <y>0</y>
      <width>2651</width>
-     <height>26</height>
+     <height>22</height>
     </rect>
    </property>
   </widget>

@@ -26,8 +26,9 @@ from program.MicroscopeDev.ImageLabel import DrawableLabel
 
 from program.MassFlowController.MFCWindow import MFCWorker, MFCInputData, MFCProgramTableDialog
 from program.MicroscopeDev import toupcam
-from program.TempCtrlDev.TempWindow import TempProgramTableDialog, WebEngineView, TempWorker, TempInputData
-from program.Mainwindow import Ui_MainWindow
+from program.TempCtrlDev.TempWindow import TempProgramTableDialog, TempWorker, TempInputData
+from program.Ui_MainWindow import Ui_MainWindow
+from program.robotControl.RobotWindow import WebEngineView
 
 BASE_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
 config_directory_path = os.path.join(BASE_DIR, 'config')
@@ -36,28 +37,11 @@ result_directory_path = os.path.join(BASE_DIR, 'result')
 temp_config_path = os.path.join(BASE_DIR, 'config', "temp_config")
 
 
-class MainWindow(QMainWindow, Ui_MainWindow):
+class AICVD(QMainWindow, Ui_MainWindow):
     evtCallback = pyqtSignal(int)
-
-    @staticmethod
-    def makeLayout(lbl1, sli1, val1, lbl2, sli2, val2):
-        hlyt1 = QHBoxLayout()
-        hlyt1.addWidget(lbl1)
-        hlyt1.addStretch()
-        hlyt1.addWidget(val1)
-        hlyt2 = QHBoxLayout()
-        hlyt2.addWidget(lbl2)
-        hlyt2.addStretch()
-        hlyt2.addWidget(val2)
-        vlyt = QVBoxLayout()
-        vlyt.addLayout(hlyt1)
-        vlyt.addWidget(sli1)
-        vlyt.addLayout(hlyt2)
-        vlyt.addWidget(sli2)
-        return vlyt
-
     def __init__(self, parent=None):
-        super(MainWindow, self).__init__(parent)
+        super(AICVD, self).__init__(parent)
+        self.timer_temperature_window = None
         self.IsLaunched = None
         self.IsThresholdSet = None
         self.total_order = None
@@ -160,7 +144,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.BT_launch_experiment.setText("启动实验")
         print(f'停止实验')
 
-
     def start_experiment(self):
         try:
             # 获取实验跟踪信息：配置文件名和当前轮次
@@ -195,7 +178,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                           self.params.columns.get_loc('H2_step1_time'):self.params.columns.get_loc('H2_end_flow') + 1]
                 self.mfc_program_H2 = self.params.loc[0, columns].tolist()
                 print(f'mfc_program_H2: {self.mfc_program_H2}')
-
                 # 将参数写入对应设备
                 # 将温度程序参数写入温控设备
                 if self.worker_temp:
@@ -210,22 +192,18 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                             TempInputData(iParamNo=iparam, Value=self.temperature_program_b[i], iDevAdd=2))
                     self.lbl_buffer_b.setText(f'{self.temperature_program_name_b}')
                     self.worker_temp.read_program_settings()
-
+                    self.set_temp_xlim()
                 # 将流量写入MFC
                 # 先将各纯气体流量值转化为各设备通道输入值
                 self.air_transform(Ar=self.mfc_program_Ar, H2=self.mfc_program_H2)
-
                 # 设置实验开始标志位
                 self.IsExpEnd = False
                 self.is_final_step_b = False
                 self.IsLaunched = True
-
                 self.BT_launch_experiment.setText("停止实验")
                 self.lbl_order.setText(f'{self.order}/{self.total_order}')
-
                 # 清洗MFC
                 self.cleanMFC()
-
                 print(f'启动实验')
         except Exception as e:
             print(e)
@@ -252,13 +230,13 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if key == "H2":
                 H2 = value
                 print(f"H2 = {H2}")
-            # TODO 如果有其他其他参与，在这里继续添加其他气体
+            # TODO 如果有其他其他参与，在这里继续添加其他气体，还要重新写气体混合公式，以建立纯气体与设备通道之间的映射
             # if key == "xx":
             #     xx = value
             #     print(f"xx = {xx}")
         for idev in range(self.mfc_dev_num):
             self.mfc_schedules[idev].clear()
-        # 将气体流量转化为设备输入值后，写入每个设备的定时输入计划
+        # 将气体流量转化为设备输入值后，写入每个设备的定时输入计划，以下的公式，即为纯氩气和纯氢气与设备通道0和2之间的映射
         if Ar and H2:
             for i in range(int(len(Ar) / 2)):
                 index = i * 2
@@ -278,7 +256,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f'dev 2 schedules: {self.mfc_schedules[2]}')
 
     def onSaveResult(self):
-        # TODO write save result logic
         try:
             # 更新轮次
             self.order = self.order + 1
@@ -291,19 +268,17 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             print(f'snap configuration: {current_profile}')
             # 保存结果
             current_time = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-            print(f'1111111111111')
             print(f'params: {self.params}')
             self.params["Video_name"] = f'{self.out_video_path}'
-            print(f'22222222222222')
             self.params["Date"] = f'{self.exp_start_time}, {current_time}'
             old_df = pd.read_excel(self.result_filepath, sheet_name=0)
             updated_df = pd.concat([old_df, self.params], ignore_index=True)
-            print(f'133333333333333333')
             updated_df.to_excel(self.result_filepath, index=False)
             print(f'结果已保存')
         except Exception as e:
             print(f'An error occurred when save result: {e}')
 
+    # MFC RELATED
     def init_mfc_ui(self):
         self.worker_mfc = None
         self.mfc_dev_num = 16
@@ -428,6 +403,193 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.line_mfc_pv = [self.ax_mfc.plot([], [], 'r-')[0] for _ in range(self.mfc_dev_num)]
         self.line_mfc_sv = [self.ax_mfc.plot([], [], 'b-')[0] for _ in range(self.mfc_dev_num)]
 
+    def onConnectMFC(self):
+        if self.worker_mfc:
+            self.closeMFC()
+        else:
+            self.startMFC()
+
+    def startMFC(self):
+        try:
+            print(f'CBB_temp_port:{self.CBB_temp_port.currentText()}')
+            self.worker_mfc = MFCWorker(portName=self.CBB_mfc_port.currentText(),
+                                        baudRate=self.CBB_mfc_buadrate.currentText())
+        except Exception as e:
+            print(f"An error occurred connect to mfc comm: {e}")
+            QMessageBox.critical(self, "Error", f"An error occurred connect to mfc comm: {e}")
+        if self.worker_mfc:
+            self.timer_mfc_window.start(self.mfc_time_interval)
+            self.worker_mfc.result_signal.connect(self.handle_result_mfc)
+            self.worker_mfc.start()
+            self.GB_mfc_setSV.setEnabled(True)
+            self.GB_mfc_switch.setEnabled(True)
+            self.GB_mfc_crtlmode.setEnabled(True)
+            self.GB_mfc_dev.setEnabled(True)
+            self.createMFCFig()
+            self.BT_connect_mfc.setText("断开")
+
+    def closeMFC(self):
+        self.timer_mfc_window.stop()
+        self.figure_mfc.clf()
+        self.canvas_mfc.draw()
+        self.VLayout_mfc_display.removeWidget(self.canvas_mfc)
+        self.canvas_mfc = None
+        self.GB_mfc_setSV.setEnabled(False)
+        self.GB_mfc_switch.setEnabled(False)
+        self.GB_mfc_crtlmode.setEnabled(False)
+        self.GB_mfc_dev.setEnabled(False)
+        for i in range(self.mfc_dev_num):
+            rb_mfc = self.findChild(QRadioButton, f'RB_mfc_{i}')
+            rb_mfc.setEnabled(False)
+            rb_mfc.setText("")
+            rb_mfc.setEnabled(False)
+            lbl_pv_mfc = self.findChild(QLabel, f'lbl_pv_mfc_{i}')
+            lbl_pv_mfc.setText("")
+            lbl_sv_mfc = self.findChild(QLabel, f'lbl_sv_mfc_{i}')
+            lbl_sv_mfc.setText("")
+        if self.worker_mfc:
+            self.worker_mfc.stop_run()
+        self.worker_mfc = None
+        self.BT_connect_mfc.setText("连接")
+
+    def handle_result_mfc(self, result):
+        self.mfcData = copy.deepcopy(result)
+        # print(f'mfc result updated')
+
+    def onSetMFCSV(self):
+        print(f'set value')
+        try:
+            if self.worker_mfc:
+                sv = float(self.SB_mfc_sv.value())
+                print(f'sv: {sv}')
+                print(f'checked_id: {self.button_group.checkedId()}')
+                self.worker_mfc.write_data('sv', MFCInputData(value=sv, id=self.button_group.checkedId()))
+        except Exception as e:
+            print(f"An error occurred when set mfc value: {e}")
+            QMessageBox.critical(self, "Error", f"An error occurred when set mfc value: {e}")
+
+    def onValueCtrl(self):
+        if self.worker_mfc:
+            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=1))
+
+    def onSwitchClean(self):
+        if self.worker_mfc:
+            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=2))
+
+    def onSwitchClose(self):
+        if self.worker_mfc:
+            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=0))
+
+    def onAnalogMode(self):
+        if self.worker_mfc:
+            self.worker_mfc.write_data('switch', MFCInputData(value=False, id=self.button_group.checkedId(), addr=3))
+
+    def onDigitalMode(self):
+        if self.worker_mfc:
+            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=3))
+
+    def updateMFCData(self):
+        current_time = time.time()
+        points_num = int(self.mfc_time_range * self.mfc_fps)
+
+        # 显示流量设定值和实际值
+        for i in range(self.mfc_dev_num):
+            try:
+                if self.mfcData[i]:
+                    rb_mfc = self.findChild(QRadioButton, f'RB_mfc_{i}')
+                    rb_mfc.setEnabled(True)
+                    rb_mfc.setText(f'{i}: {self.mfcData[i].fs}\n{self.mfcData[i].unit}')
+                    lbl_pv_mfc = self.findChild(QLabel, f'lbl_pv_mfc_{i}')
+                    lbl_pv_mfc.setText(f'{self.mfcData[i].pv} {self.mfcData[i].unit}')
+                    lbl_sv_mfc = self.findChild(QLabel, f'lbl_sv_mfc_{i}')
+                    lbl_sv_mfc.setText(f'{self.mfcData[i].sv} {self.mfcData[i].unit}')
+                    # 显示当前选中设备设定值和瞬时流量值
+                    if self.button_group.checkedId() == i:
+                        self.lbl_mfc_sv.setText(f'{self.mfcData[i].sv} {self.mfcData[i].unit}')
+                        self.lbl_mfc_pv.setText(f'{self.mfcData[i].pv} {self.mfcData[i].unit}')
+                    # 显示控制模式
+                    if self.button_group.checkedId() == i:
+                        if self.mfcData[i].ctrl_mode == -1:
+                            self.RB_mfc_crtllock.setChecked(True)
+                        elif self.mfcData[i].ctrl_mode == 0:
+                            self.RB_mfc_analog.setChecked(True)
+                        elif self.mfcData[i].ctrl_mode == 1:
+                            self.RB_mfc_digital.setChecked(True)
+                        else:
+                            print(f'ctrl mode error')
+                    # 显示阀控状态
+                    if self.button_group.checkedId() == i:
+                        if self.mfcData[i].switch_state == -1:
+                            self.RB_mfc_switchlock.setChecked(True)
+                        elif self.mfcData[i].switch_state == 1:
+                            self.RB_mfc_close.setChecked(True)
+                        elif self.mfcData[i].switch_state == 2:
+                            self.RB_mfc_vctrl.setChecked(True)
+                        elif self.mfcData[i].switch_state == 4:
+                            self.RB_mfc_clean.setChecked(True)
+                        else:
+                            print(f'switch state error')
+                    # 设置设定按钮可用性和设定值单位
+                    if self.button_group.checkedId() == i:
+                        if self.mfcData[i].switch_state == 2 and self.mfcData[i].ctrl_mode == 1:
+                            self.BT_set_mfc_sv.setEnabled(True)
+                        else:
+                            self.BT_set_mfc_sv.setEnabled(False)
+                        self.lbl_mfc_sv_unit.setText(str(self.mfcData[i].unit))
+
+                    # 更新line_mfc_pv
+                    pv = self.mfcData[i].pv
+                    xdata_mfc_pv, ydata_mfc_pv = self.line_mfc_pv[i].get_data()
+                    xdata_mfc_pv = np.append(xdata_mfc_pv, current_time)
+                    ydata_mfc_pv = np.append(ydata_mfc_pv, pv)
+                    # 限制数据点数量，避免内存无限增长
+                    if len(xdata_mfc_pv) > points_num:  # 保留最近数据点
+                        xdata_mfc_pv = xdata_mfc_pv[-points_num:]
+                        ydata_mfc_pv = ydata_mfc_pv[-points_num:]
+                    # 更新line_mfc_sv
+                    sv = self.mfcData[i].sv
+                    xdata_mfc_sv, ydata_mfc_sv = self.line_mfc_sv[i].get_data()
+                    xdata_mfc_sv = np.append(xdata_mfc_sv, current_time)
+                    ydata_mfc_sv = np.append(ydata_mfc_sv, sv)
+                    # 限制数据点数量，避免内存无限增长
+                    if len(xdata_mfc_sv) > points_num:
+                        xdata_mfc_sv = xdata_mfc_sv[-points_num:]
+                        ydata_mfc_sv = ydata_mfc_sv[-points_num:]
+                    # 更新图表
+                    self.line_mfc_pv[i].set_data(xdata_mfc_pv, ydata_mfc_pv)
+                    self.line_mfc_sv[i].set_data(xdata_mfc_sv, ydata_mfc_sv)
+                    try:
+                        if self.button_group.checkedId() == i:
+                            self.line_mfc_pv[i].set_visible(True)
+                            self.line_mfc_sv[i].set_visible(True)
+                            tick_locs = self.ax_mfc.get_xticks()
+                            x_min = max(0, xdata_mfc_pv[-1] - self.mfc_time_range)
+                            x_max = xdata_mfc_pv[-1]
+                            if tick_locs[0] < x_min:
+                                tick_locs = tick_locs + self.xticks_interval
+                            xlabels = [datetime.fromtimestamp(ts).strftime('%H:%M:%S') for ts in tick_locs]
+                            self.ax_mfc.set_xticks(tick_locs)
+                            self.ax_mfc.set_xticklabels(xlabels)
+                            self.ax_mfc.set_xlim(x_min, x_max)
+                            self.ax_mfc.relim()  # 重新计算轴的限制
+                            self.ax_mfc.autoscale_view()  # 自动缩放视图
+                            max_flow = max(self.mfcData[i].fs, self.mfcData[i].pv, self.mfcData[i].sv) * 1.4
+                            self.ax_mfc.set_ylim(-1, max_flow)
+                        else:
+                            self.line_mfc_pv[i].set_visible(False)
+                            self.line_mfc_sv[i].set_visible(False)
+                    except Exception as e:
+                        print(e)
+                else:
+                    rb_mfc = self.findChild(QRadioButton, f'RB_mfc_{i}')
+                    rb_mfc.setText(f'{i}: 未连接')
+                    rb_mfc.setEnabled(False)
+            except Exception as e:
+                print(e)
+        # 绘制更新后的图表
+        self.canvas_mfc.draw()
+
+    # TEMPERATURE RELATED
     def init_tempctrl_ui(self):
         self.worker_temp = None
         self.rtu_server = None
@@ -487,7 +649,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.timer_temperature_window = QTimer(self)
         self.timer_temperature_window.timeout.connect(self.updateTempData)  # 连接定时器信号到槽函数
 
-
         # 设置可用的comm端口号
         ports_list = list(serial.tools.list_ports.comports())
         ports_name = [port.name for port in ports_list]
@@ -496,6 +657,486 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         self.CBB_signal_port.clear()
         self.CBB_signal_port.addItems(ports_name)
+
+    # slot functions for TempCtrlDev
+    def showContextMenu(self, position):
+        # 创建右键菜单
+        try:
+            selected = self.tree_config.itemAt(position)
+            print(f'selected:{selected}')
+            menu = QMenu(self.tree_config)
+            addNewAction = QAction('添加', self.tree_config)
+            renameAction = QAction('重命名', self.tree_config)
+            editAction = QAction('编辑', self.tree_config)
+            deleteAction = QAction('删除', self.tree_config)
+            updateAction = QAction('刷新', self.tree_config)
+            if selected:
+                if selected == self.rootItem:
+                    # 添加动作到菜单
+                    menu.addAction(addNewAction)
+                    addNewAction.triggered.connect(self.addNewItem)
+                else:
+                    menu.addAction(editAction)
+                    menu.addAction(deleteAction)
+                    menu.addAction(renameAction)
+                    renameAction.triggered.connect(self.renameItem)
+                    editAction.triggered.connect(self.editItem)
+                    deleteAction.triggered.connect(self.deleteItem)
+            else:
+                menu.addAction(updateAction)
+                updateAction.triggered.connect(self.updateItem)
+            # 显示菜单
+            menu.exec_(self.tree_config.viewport().mapToGlobal(position))
+        except Exception as e:
+            print(e)
+
+    def addNewItem(self):
+        selected = self.tree_config.currentItem()
+        if not selected.parent():
+            newItem = QTreeWidgetItem(self.rootItem, ["New Program"])
+
+    def renameItem(self):
+        selected = self.tree_config.currentItem()
+        print(f'selected: {selected.text(0)}')
+        selected.setFlags(selected.flags() | Qt.ItemIsEditable)
+        self.tree_config.editItem(selected)
+        print(f'selected: {selected.text(0)}')
+        self.original_item_name = selected.text(0)
+
+    def handleItemChange(self, item, column):
+        # 当项被更改后，这个槽函数将被调用，并且接收被编辑的项和列索引
+        if column == 0:  # 通常第一列包含项的文本
+            filepath = os.path.join(temp_config_path, f'{self.original_item_name}.csv')
+            filename_new = item.text(0)
+            filepath_new = os.path.join(temp_config_path, f'{filename_new}.csv')
+            if os.path.exists(filepath):
+                try:
+                    os.rename(filepath, filepath_new)
+                    print(f'文件已重命名')
+                except OSError as e:
+                    print(f'重命名文件时出错： {e}')
+
+    def editItem(self):
+        # 编辑项的槽函数
+        selected = self.tree_config.currentItem()
+
+        if selected:
+            print(f'selected:{selected.text(0)}')
+            self.editFile(selected.text(0))
+
+    def deleteItem(self):
+        # 删除项的槽函数
+        selected = self.tree_config.currentItem()
+        if selected:
+            if selected.parent():
+                # 如果是子节点，从父节点移除
+                filepath = Path(os.path.join(temp_config_path, f'{selected.text(0)}.csv'))
+                if os.path.exists(filepath):
+                    try:
+                        filepath.unlink()
+                    except Exception as e:
+                        print(f'删除文件时出错： {e}')
+                selected.parent().takeChild(selected.parent().indexOfChild(selected))
+            else:
+                # 如果是顶级节点，从树中移除
+                self.tree_config.takeTopLevelItem(self.tree_config.indexOfTopLevelItem(selected))
+            # QMessageBox.information(self, "信息", "项已删除")
+
+    def updateItem(self):
+        while self.rootItem.childCount() > 0:
+            # takeChild 方法删除子节点
+            self.rootItem.takeChild(self.rootItem.childCount() - 1)
+        # 列出文件夹内的所有文件
+        for filepath in os.listdir(temp_config_path):
+            if filepath.endswith('.csv'):
+                # 获取文件的完整路径
+                file_path = os.path.join(temp_config_path, filepath)
+                # 创建一个新的QTreeWidgetItem并添加到QTreeWidget
+                item = QTreeWidgetItem(self.rootItem, [os.path.splitext(filepath)[0]])
+                item.setToolTip(0, file_path)
+        # 展开所有项以便查看
+        self.tree_config.expandAll()
+
+    def writeBuffer(self):
+        current_index = self.dialog.zoneComboBox.currentIndex()
+        print(f'current_index={current_index}')
+        idev = current_index + 1
+        try:
+            if self.worker_temp:
+                for row in range(self.dialog.tableWidget.rowCount()):
+                    row_data = []
+                    for column in range(self.dialog.tableWidget.columnCount()):
+                        # 检查项是否存在，如果不存在则添加空字符串
+                        item = self.dialog.tableWidget.item(row, column) if self.dialog.tableWidget.item(row, column) else None
+                        row_data.append(item.text() if item else '')
+                        print(f'item: {item.text() if item else ""}, row: {row}, column: {column}')
+                        if item:
+                            if column != 0 and item.text():
+                                iparam = row * 2 + column + 79
+                                value = float(item.text())
+                                print(f'iparam: {iparam}, value: {value}')
+                                self.worker_temp.write_data(TempInputData(iParamNo=iparam, Value=value, iDevAdd=idev))
+                        else:
+                            break
+                if idev == 1:
+                    self.lbl_buffer_a.setText(f'{self.dialog.filename}')
+                else:
+                    self.lbl_buffer_b.setText(f'{self.dialog.filename}')
+                self.dialog.saveTable()
+                QMessageBox.information(None, "文件写入", "文件写入成功！", QMessageBox.Ok)
+                self.worker_temp.read_program_settings()
+                self.set_temp_xlim()
+        except Exception as e:
+            print(f"An error occurred while writing to the Buffer: {e}")
+            QMessageBox.critical(self, "Error", f"An error occurred while writing to the Buffer: {e}")
+
+    def onConnectTempDev(self):
+        if self.worker_temp:
+            self.close_temp()
+        else:
+            self.start_temp()
+
+    def start_temp(self):
+        try:
+            print(f'CBB_temp_port:{self.CBB_temp_port.currentText()}')
+            self.worker_temp = TempWorker(portName=f"{self.CBB_temp_port.currentText()}", baudRate=9600)
+        except Exception as e:
+            print(f"An error occurred connect to temperature control device: {e}")
+            QMessageBox.critical(self, "Error", f"An error occurred connect to temperature control device: {e}")
+
+        if self.worker_temp:
+            self.timer_temperature_window.start(self.temp_time_interval)
+            self.worker_temp.result_signal.connect(self.handle_result_temp)
+            self.worker_temp.program_signal.connect(self.handle_result_pgm)
+            self.worker_temp.start()
+            self.worker_temp.read_program_settings()
+            self.set_temp_xlim()
+            self.BT_run_a.setEnabled(True)
+            self.BT_hold_a.setEnabled(True)
+            self.BT_stop_a.setEnabled(True)
+            self.BT_run_b.setEnabled(True)
+            self.BT_hold_b.setEnabled(True)
+            self.BT_stop_b.setEnabled(True)
+            self.tree_config.setEnabled(True)
+            self.createTempFig()
+            self.BT_connect_tempDev.setText("断开")
+
+    def close_temp(self):
+        try:
+            self.timer_temperature_window.stop()
+            self.worker_temp.stop_run()
+            self.worker_temp=None
+            self.figure_a.clf()
+            self.canvas_a.draw()
+            self.VLayout_tempDisplay_a.removeWidget(self.canvas_a)
+            self.canvas_a = None
+            self.figure_b.clf()
+            self.canvas_b.draw()
+            self.VLayout_tempDisplay_b.removeWidget(self.canvas_b)
+            self.canvas_b = None
+            self.lbl_pv_a.clear()
+            self.lbl_sv_a.clear()
+            self.lbl_mv_a.clear()
+            self.lbl_step_a.clear()
+            self.lbl_time_a.clear()
+            self.lbl_pv_b.clear()
+            self.lbl_sv_b.clear()
+            self.lbl_mv_b.clear()
+            self.lbl_step_b.clear()
+            self.lbl_time_b.clear()
+            self.psbar_a.setValue(0)
+            self.psbar_b.setValue(0)
+            self.BT_run_a.setEnabled(False)
+            self.BT_hold_a.setEnabled(False)
+            self.BT_stop_a.setEnabled(False)
+            self.BT_run_b.setEnabled(False)
+            self.BT_hold_b.setEnabled(False)
+            self.BT_stop_b.setEnabled(False)
+            self.tree_config.setEnabled(False)
+            self.BT_stop_a.setStyleSheet(self.default_color)
+            self.BT_hold_a.setStyleSheet(self.default_color)
+            self.BT_run_a.setStyleSheet(self.default_color)
+            self.BT_stop_b.setStyleSheet(self.default_color)
+            self.BT_hold_b.setStyleSheet(self.default_color)
+            self.BT_run_b.setStyleSheet(self.default_color)
+            self.BT_connect_tempDev.setText("连接")
+        except Exception as e:
+            print(f'An error occurred when close temp: {e}')
+
+    def set_temp_xlim(self):
+        if self.total_set_time_a and self.total_set_time_b:
+            self.temp_time_range = max(self.total_set_time_a, self.total_set_time_b) * 60
+            ctime = time.time()
+            self.ax_a.set_xlim(ctime, ctime + self.temp_time_range - 1)
+            xticks = [ctime + i * self.temp_time_range / 4 for i in range(5)]
+            xlabels = [datetime.fromtimestamp(ts).strftime('%H:%M:%S') for ts in xticks]
+            self.ax_a.set_xticks(xticks, xlabels)
+
+            self.ax_b.set_xlim(ctime, ctime + self.temp_time_range - 1)
+            xticks = [ctime + i * self.temp_time_range / 4 for i in range(5)]
+            xlabels = [datetime.fromtimestamp(ts).strftime('%H:%M:%S') for ts in xticks]
+            self.ax_b.set_xticks(xticks, xlabels)
+
+    def onSetTempThreshold(self):
+        if self.IsThresholdSet:
+            self.cancel_threshold()
+        else:
+            self.set_threshold()
+
+    def set_threshold(self):
+        try:
+            temp_threshold_low = self.SB_temp_threshold_low.text()
+            temp_threshold_high = self.SB_temp_threshold_high.text()
+            if temp_threshold_low and temp_threshold_high:
+                self.temp_threshold_low = int(temp_threshold_low)
+                self.temp_threshold_high = int(temp_threshold_high)
+                print(f'set temp threshold: {self.temp_threshold_low} - {self.temp_threshold_high}')
+            self.BT_set_temp_threshold.setChecked(True)
+            self.BT_set_temp_threshold.setText("取消设定")
+            self.IsThresholdSet = True
+        except Exception as e:
+            print(f'An error occurred when set temp threshold: {e}')
+
+    def cancel_threshold(self):
+        self.BT_set_temp_threshold.setChecked(False)
+        self.BT_set_temp_threshold.setText("设定")
+        self.temp_threshold_low = None
+        self.temp_threshol_high = None
+        self.SB_temp_threshold_low.clear()
+        self.SB_temp_threshold_high.clear()
+        self.IsThresholdSet = False
+
+    def onConnectSignalComm(self):
+        if self.rtu_server:
+            self.close_signalcomm()
+        else:
+            self.start_signalcomm()
+
+    def start_signalcomm(self):
+        try:
+            self.signal_comm = serial.Serial(port=f"{self.CBB_signal_port.currentText()}", baudrate=9600, bytesize=8, parity='N', stopbits=1)
+            self.rtu_server = modbus_rtu.RtuServer(self.signal_comm)
+        except Exception as e:
+            print(f"An error occurred connect to PLC: {e}")
+            QMessageBox.critical(self, "Error", f"An error occurred connect to PCL: {e}")
+        if self.rtu_server:
+            self.rtu_server.start()
+            self.slave = self.rtu_server.add_slave(3)
+            self.slave.add_block('0', cst.HOLDING_REGISTERS, 0, 1200)
+            self.slave.add_block('1', cst.COILS, 0, 10)
+            self.BT_set_temp_threshold.setEnabled(True)
+            self.BT_sendSignal.setEnabled(True)
+            self.BT_connect_signalComm.setText("断开")
+
+    def close_signalcomm(self):
+        self.rtu_server.remove_slave(3)
+        self.rtu_server.stop()
+        self.rtu_server = None
+        self.slave = None
+        self.signal_comm = None
+        self.cancel_threshold()
+        self.BT_set_temp_threshold.setEnabled(False)
+        self.BT_sendSignal.setEnabled(False)
+        self.SB_temp_threshold_low.clear()
+        self.SB_temp_threshold_high.clear()
+        self.BT_connect_signalComm.setText("连接")
+
+    def handle_result_pgm(self, result):
+        self.program_a, self.program_b = copy.deepcopy(result)
+        print(f'program a: {self.program_a}')
+        print(f'program b: {self.program_b}')
+
+    def handle_result_temp(self, result):
+        self.tempdevData = copy.deepcopy(result)
+        # print(f'temp result updated')
+
+    def onRunA(self):
+        if self.worker_temp:
+            self.is_final_step_a = False
+            self.BT_run_a.setChecked(True)
+            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=0, iDevAdd=1))
+            print(f'runA')
+
+    def onRunB(self):
+        if self.worker_temp:
+            self.is_final_step_b = False
+            self.BT_run_b.setChecked(True)
+            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=0, iDevAdd=2))
+            print(f'runB')
+
+    def onHoldA(self):
+        if self.worker_temp:
+            self.BT_hold_a.setChecked(True)
+            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=2, iDevAdd=1))
+            print(f'holdA')
+
+    def onHoldB(self):
+        if self.worker_temp:
+            self.BT_hold_b.setChecked(True)
+            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=2, iDevAdd=2))
+            print(f'holdB')
+
+    def onStopA(self):
+        if self.worker_temp:
+            self.BT_stop_a.setChecked(True)
+            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=1, iDevAdd=1))
+            print(f'stopA')
+
+    def onStopB(self):
+        if self.worker_temp:
+            self.BT_stop_b.setChecked(True)
+            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=1, iDevAdd=2))
+            print(f'stopB')
+
+    def updateTempData(self):
+        # 将温度值显示在QLineEdit中
+        ctime = time.time()
+        if self.tempdevData[0]:
+            self.lbl_pv_a.setText(str(self.tempdevData[0].pv))
+            self.lbl_sv_a.setText(str(self.tempdevData[0].sv))
+            self.lbl_mv_a.setText(str(self.tempdevData[0].mv))
+            self.lbl_step_a.setText(str(self.tempdevData[0].step))
+            self.lbl_time_a.setText(str(self.tempdevData[0].tim))
+            if self.tempdevData[0].state == 0:
+                self.BT_run_a.setChecked(True)
+                self.BT_run_a.setStyleSheet(self.selected_color)
+                self.BT_hold_a.setStyleSheet(self.default_color)
+                self.BT_stop_a.setStyleSheet(self.default_color)
+            elif self.tempdevData[0].state == 1:
+                self.BT_stop_a.setChecked(True)
+                self.BT_stop_a.setStyleSheet(self.selected_color)
+                self.BT_hold_a.setStyleSheet(self.default_color)
+                self.BT_run_a.setStyleSheet(self.default_color)
+            elif self.tempdevData[0].state == 2:
+                self.BT_hold_a.setChecked(True)
+                self.BT_hold_a.setStyleSheet(self.selected_color)
+                self.BT_run_a.setStyleSheet(self.default_color)
+                self.BT_stop_a.setStyleSheet(self.default_color)
+            else:
+                print(f'state_a error')
+
+        if self.tempdevData[1]:
+            self.lbl_pv_b.setText(str(self.tempdevData[1].pv))
+            self.lbl_sv_b.setText(str(self.tempdevData[1].sv))
+            self.lbl_mv_b.setText(str(self.tempdevData[1].mv))
+            self.lbl_step_b.setText(str(self.tempdevData[1].step))
+            self.lbl_time_b.setText(str(self.tempdevData[1].tim))
+            if self.tempdevData[1].state == 0:
+                self.BT_run_b.setChecked(True)
+                self.BT_run_b.setStyleSheet(self.selected_color)
+                self.BT_hold_b.setStyleSheet(self.default_color)
+                self.BT_stop_b.setStyleSheet(self.default_color)
+            elif self.tempdevData[1].state == 1:
+                self.BT_stop_b.setChecked(True)
+                self.BT_stop_b.setStyleSheet(self.selected_color)
+                self.BT_hold_b.setStyleSheet(self.default_color)
+                self.BT_run_b.setStyleSheet(self.default_color)
+            elif self.tempdevData[1].state == 2:
+                self.BT_hold_b.setChecked(True)
+                self.BT_hold_b.setStyleSheet(self.selected_color)
+                self.BT_run_b.setStyleSheet(self.default_color)
+                self.BT_stop_b.setStyleSheet(self.default_color)
+            else:
+                print(f'state_b error')
+
+        try:
+            self.total_set_time_a = sum(self.program_a[1][:-1])
+            self.total_set_time_b = sum(self.program_b[1][:-1])
+            if self.tempdevData[0]:
+                # 绘制ZoneA温度曲线
+                if self.total_set_time_a and self.total_set_time_b:
+                    self.temp_time_range = max(self.total_set_time_a, self.total_set_time_b) * 60
+                x_data_pv_a, y_data_pv_a = self.line_pv_a.get_data()
+                if len(x_data_pv_a) > self.temp_time_range * self.temp_fps:
+                    x_data_pv_a = []
+                    y_data_pv_a = []
+                    self.ax_a.set_xlim(ctime, ctime + self.temp_time_range - 1)
+                    xticks = [ctime + i * self.temp_time_range / 4 for i in range(5)]
+                    xlabels = [datetime.fromtimestamp(ts).strftime('%H:%M:%S') for ts in xticks]
+                    self.ax_a.set_xticks(xticks, xlabels)
+                x_data_pv_a = np.append(x_data_pv_a, ctime)
+                y_data_pv_a = np.append(y_data_pv_a, self.tempdevData[0].pv)
+
+                x_data_sv_a, y_data_sv_a = self.line_sv_a.get_data()
+                if len(x_data_sv_a) > self.temp_time_range * self.temp_fps:
+                    x_data_sv_a = []
+                    y_data_sv_a = []
+                x_data_sv_a = np.append(x_data_sv_a, ctime)
+                y_data_sv_a = np.append(y_data_sv_a, self.tempdevData[0].sv)
+                # 更新图形
+                self.line_pv_a.set_data(x_data_pv_a, y_data_pv_a)
+                self.line_sv_a.set_data(x_data_sv_a, y_data_sv_a)
+                self.ax_a.set_ylim(-5, self.max_temperature_a)
+                self.ax_a.relim()  # 重新计算坐标轴的界限
+                self.ax_a.autoscale_view(True, True, True)  # 自动缩放
+                self.canvas_a.draw()  # 重绘画布
+            if self.tempdevData[1]:
+                # 绘制ZoneB温度曲线
+                x_data_pv_b, y_data_pv_b = self.line_pv_b.get_data()
+                if len(x_data_pv_b) > self.temp_time_range * self.temp_fps:
+                    x_data_pv_b = []
+                    y_data_pv_b = []
+                    self.ax_b.set_xlim(ctime, ctime + self.temp_time_range - 1)
+                    xticks = [ctime + i * self.temp_time_range / 4 for i in range(5)]
+                    xlabels = [datetime.fromtimestamp(ts).strftime('%H:%M:%S') for ts in xticks]
+                    self.ax_b.set_xticks(xticks, xlabels)
+                x_data_pv_b = np.append(x_data_pv_b, ctime)
+                y_data_pv_b = np.append(y_data_pv_b, self.tempdevData[1].pv)
+
+                x_data_sv_b, y_data_sv_b = self.line_sv_b.get_data()
+                if len(x_data_sv_b) > self.temp_time_range * self.temp_fps:
+                    x_data_sv_b = []
+                    y_data_sv_b = []
+                x_data_sv_b = np.append(x_data_sv_b, ctime)
+                y_data_sv_b = np.append(y_data_sv_b, self.tempdevData[1].sv)
+                # 更新图形
+                self.line_pv_b.set_data(x_data_pv_b, y_data_pv_b)
+                self.line_sv_b.set_data(x_data_sv_b, y_data_sv_b)
+                self.ax_b.set_ylim(-5, self.max_temperature_b)
+                self.ax_b.relim()  # 重新计算坐标轴的界限
+                self.ax_b.autoscale_view(True, True, True)  # 自动缩放
+                self.canvas_b.draw()  # 重绘画布
+
+            # 绘制进度条
+            try:
+                if self.tempdevData[0]:
+                    if self.program_a[1]:
+                        if self.is_final_step_a and self.tempdevData[0].step == 1:
+
+                            progress_time_a = self.total_set_time_a
+                        else:
+                            progress_time_a = sum(self.program_a[1][:self.tempdevData[0].step - 1]) + self.tempdevData[
+                                0].tim
+                        progress_percent_a = int(progress_time_a / self.total_set_time_a * 100)
+
+                        self.psbar_a.setValue(progress_percent_a)
+                        self.max_temperature_a = max(self.max_temperature_a, max(self.tempdevData[0].pv,
+                                                     self.tempdevData[0].sv) * 1.4)
+                    else:
+                        self.max_temperature_a = max(self.max_temperature_a, max(self.tempdevData[0].pv,
+                                                     self.tempdevData[0].sv) * 1.4)
+                        self.psbar_a.setValue(0)
+                if self.tempdevData[1]:
+                    if self.program_b[1]:
+
+                        if self.is_final_step_b and self.tempdevData[1].step == 1:
+                            progress_time_b = self.total_set_time_b
+                        else:
+                            progress_time_b = sum(self.program_b[1][:self.tempdevData[1].step - 1]) + self.tempdevData[
+                                1].tim
+                        progress_percent_b = int(progress_time_b / self.total_set_time_b * 100)
+                        self.psbar_b.setValue(progress_percent_b)
+                        self.max_temperature_b = max(self.max_temperature_b, max(self.tempdevData[1].pv,
+                                                     self.tempdevData[1].sv) * 1.4)
+                    else:
+                        self.max_temperature_b = max(self.max_temperature_b, max(self.tempdevData[1].pv,
+                                                     self.tempdevData[1].sv) * 1.4)
+                        self.psbar_b.setValue(0)
+            except Exception as e:
+                print(e)
+
+        except Exception as e:
+            print(e)
 
     def createTempFig(self):
         #创建温度曲线图表
@@ -538,6 +1179,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.ax_b.set_xticks(xticks, xlabels)
         self.ax_b.yaxis.set_major_formatter(FormatStrFormatter('%.1f'))
 
+    # MICROSCOPE RELATED
     def init_microscope_ui(self):
         self.hcam = None
         self.is_recording = False
@@ -591,266 +1233,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.slider_temp.valueChanged.connect(self.onWBTemp)
         self.slider_tint.valueChanged.connect(self.onWBTint)
 
-
-
         self.timer_camera.timeout.connect(self.onTimer)
         self.evtCallback.connect(self.onevtCallback)
-
-
-    def init_robot_ui(self):
-        self.browser_view = WebEngineView()
-        self.VLayout_robot.addWidget(self.browser_view, stretch=1)
-
-        self.create_navigation_bar()
-        self.browser_view.load(QUrl("http://192.168.0.10/dist/#/login"))
-
-        self.browser_view.loadFinished.connect(self.on_load_finished)
-
-    def onSettings(self):
-        if self.showSettings == True:
-            self.widget_settings.hide()
-            self.showSettings = False
-            self.BT_settings.setText(">")
-        else:
-            self.widget_settings.show()
-            self.showSettings = True
-            self.BT_settings.setText("<")
-
-    def onConnectMFC(self):
-        if self.worker_mfc:
-            self.closeMFC()
-        else:
-            self.startMFC()
-
-    def startMFC(self):
-        try:
-            print(f'CBB_temp_port:{self.CBB_temp_port.currentText()}')
-            self.worker_mfc = MFCWorker(portName=self.CBB_mfc_port.currentText(),
-                                        baudRate=self.CBB_mfc_buadrate.currentText())
-        except Exception as e:
-            print(f"An error occurred connect to mfc comm: {e}")
-            QMessageBox.critical(self, "Error", f"An error occurred connect to mfc comm: {e}")
-        if self.worker_mfc:
-            self.timer_mfc_window.start(self.mfc_time_interval)
-            self.worker_mfc.result_signal.connect(self.handle_result_mfc)
-            self.worker_mfc.start()
-            self.GB_mfc_setSV.setEnabled(True)
-            self.GB_mfc_switch.setEnabled(True)
-            self.GB_mfc_crtlmode.setEnabled(True)
-            self.GB_mfc_dev.setEnabled(True)
-            self.createMFCFig()
-            self.BT_connect_mfc.setText("断开")
-
-
-    def closeMFC(self):
-        self.timer_mfc_window.stop()
-        self.figure_mfc.clf()
-        self.canvas_mfc.draw()
-        self.VLayout_mfc_display.removeWidget(self.canvas_mfc)
-        self.canvas_mfc = None
-        self.GB_mfc_setSV.setEnabled(False)
-        self.GB_mfc_switch.setEnabled(False)
-        self.GB_mfc_crtlmode.setEnabled(False)
-        self.GB_mfc_dev.setEnabled(False)
-        for i in range(self.mfc_dev_num):
-            rb_mfc = self.findChild(QRadioButton, f'RB_mfc_{i}')
-            rb_mfc.setEnabled(False)
-            rb_mfc.setText("")
-            rb_mfc.setEnabled(False)
-            lbl_pv_mfc = self.findChild(QLabel, f'lbl_pv_mfc_{i}')
-            lbl_pv_mfc.setText("")
-            lbl_sv_mfc = self.findChild(QLabel, f'lbl_sv_mfc_{i}')
-            lbl_sv_mfc.setText("")
-        if self.worker_mfc:
-            self.worker_mfc.stop_run()
-        self.worker_mfc = None
-        self.BT_connect_mfc.setText("连接")
-
-
-    def handle_result_mfc(self, result):
-        self.mfcData = copy.deepcopy(result)
-        # print(f'mfc result updated')
-
-
-    def onSetMFCSV(self):
-        print(f'set value')
-        try:
-            if self.worker_mfc:
-                sv = float(self.SB_mfc_sv.value())
-                print(f'sv: {sv}')
-                print(f'checked_id: {self.button_group.checkedId()}')
-                self.worker_mfc.write_data('sv', MFCInputData(value=sv, id=self.button_group.checkedId()))
-        except Exception as e:
-            print(f"An error occurred when set mfc value: {e}")
-            QMessageBox.critical(self, "Error", f"An error occurred when set mfc value: {e}")
-
-    def onValueCtrl(self):
-        if self.worker_mfc:
-            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=1))
-
-    def onSwitchClean(self):
-        if self.worker_mfc:
-            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=2))
-
-    def onSwitchClose(self):
-        if self.worker_mfc:
-            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=0))
-
-    def onAnalogMode(self):
-        if self.worker_mfc:
-            self.worker_mfc.write_data('switch', MFCInputData(value=False, id=self.button_group.checkedId(), addr=3))
-
-    def onDigitalMode(self):
-        if self.worker_mfc:
-            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=3))
-
-    # slot function for MFC
-    def updateMFCData(self):
-        current_time = time.time()
-        points_num = int(self.mfc_time_range * self.mfc_fps)
-
-        # 显示流量设定值和实际值
-        for i in range(self.mfc_dev_num):
-            try:
-                if self.mfcData[i]:
-                    rb_mfc = self.findChild(QRadioButton, f'RB_mfc_{i}')
-                    rb_mfc.setEnabled(True)
-                    rb_mfc.setText(f'{i}: {self.mfcData[i].fs}\n{self.mfcData[i].unit}')
-                    lbl_pv_mfc = self.findChild(QLabel, f'lbl_pv_mfc_{i}')
-                    lbl_pv_mfc.setText(f'{self.mfcData[i].pv} {self.mfcData[i].unit}')
-                    lbl_sv_mfc = self.findChild(QLabel, f'lbl_sv_mfc_{i}')
-                    lbl_sv_mfc.setText(f'{self.mfcData[i].sv} {self.mfcData[i].unit}')
-                    # 显示当前选中设备设定值和瞬时流量值
-                    if self.button_group.checkedId() == i:
-                        self.lbl_mfc_sv.setText(f'{self.mfcData[i].sv} {self.mfcData[i].unit}')
-                        self.lbl_mfc_pv.setText(f'{self.mfcData[i].pv} {self.mfcData[i].unit}')
-                    # 显示控制模式
-                    if self.button_group.checkedId() == i:
-                        if self.mfcData[i].ctrl_mode == -1:
-                            self.RB_mfc_crtllock.setChecked(True)
-                        elif self.mfcData[i].ctrl_mode == 0:
-                            self.RB_mfc_analog.setChecked(True)
-                        elif self.mfcData[i].ctrl_mode == 1:
-                            self.RB_mfc_digital.setChecked(True)
-                        else:
-                            print(f'ctrl mode error')
-                    # 显示阀控状态
-                    if self.button_group.checkedId() == i:
-                        if self.mfcData[i].switch_state == -1:
-                            self.RB_mfc_switchlock.setChecked(True)
-                        elif self.mfcData[i].switch_state == 1:
-                            self.RB_mfc_close.setChecked(True)
-                        elif self.mfcData[i].switch_state == 2:
-                            self.RB_mfc_vctrl.setChecked(True)
-                        elif self.mfcData[i].switch_state == 4:
-                            self.RB_mfc_clean.setChecked(True)
-                        else:
-                            print(f'switch state error')
-                    # 设置设定按钮可用性和设定值单位
-                    if self.button_group.checkedId() == i:
-                        if self.mfcData[i].switch_state == 2 and self.mfcData[i].ctrl_mode == 1:
-                            self.BT_set_mfc_sv.setEnabled(True)
-                        else:
-                            self.BT_set_mfc_sv.setEnabled(False)
-                        self.lbl_mfc_sv_unit.setText(str(self.mfcData[i].unit))
-
-
-                    # 更新line_mfc_pv
-                    pv = self.mfcData[i].pv
-                    xdata_mfc_pv, ydata_mfc_pv = self.line_mfc_pv[i].get_data()
-                    xdata_mfc_pv = np.append(xdata_mfc_pv, current_time)
-                    ydata_mfc_pv = np.append(ydata_mfc_pv, pv)
-                    # 限制数据点数量，避免内存无限增长
-                    if len(xdata_mfc_pv) > points_num:  # 保留最近数据点
-                        xdata_mfc_pv = xdata_mfc_pv[-points_num:]
-                        ydata_mfc_pv = ydata_mfc_pv[-points_num:]
-                    # 更新line_mfc_sv
-                    sv = self.mfcData[i].sv
-                    xdata_mfc_sv, ydata_mfc_sv = self.line_mfc_sv[i].get_data()
-                    xdata_mfc_sv = np.append(xdata_mfc_sv, current_time)
-                    ydata_mfc_sv = np.append(ydata_mfc_sv, sv)
-                    # 限制数据点数量，避免内存无限增长
-                    if len(xdata_mfc_sv) > points_num:
-                        xdata_mfc_sv = xdata_mfc_sv[-points_num:]
-                        ydata_mfc_sv = ydata_mfc_sv[-points_num:]
-                    # 更新图表
-                    self.line_mfc_pv[i].set_data(xdata_mfc_pv, ydata_mfc_pv)
-                    self.line_mfc_sv[i].set_data(xdata_mfc_sv, ydata_mfc_sv)
-                    try:
-                        if self.button_group.checkedId() == i:
-                            self.line_mfc_pv[i].set_visible(True)
-                            self.line_mfc_sv[i].set_visible(True)
-                            tick_locs = self.ax_mfc.get_xticks()
-                            x_min = max(0, xdata_mfc_pv[-1] - self.mfc_time_range)
-                            x_max = xdata_mfc_pv[-1]
-                            if tick_locs[0] < x_min:
-                                tick_locs = tick_locs + self.xticks_interval
-                            xlabels = [datetime.fromtimestamp(ts).strftime('%H:%M:%S') for ts in tick_locs]
-                            self.ax_mfc.set_xticks(tick_locs)
-                            self.ax_mfc.set_xticklabels(xlabels)
-                            self.ax_mfc.set_xlim(x_min, x_max)
-                            self.ax_mfc.relim()  # 重新计算轴的限制
-                            self.ax_mfc.autoscale_view()  # 自动缩放视图
-                            max_flow = max(self.mfcData[i].fs, self.mfcData[i].pv, self.mfcData[i].sv) * 1.4
-                            self.ax_mfc.set_ylim(-1, max_flow)
-                        else:
-                            self.line_mfc_pv[i].set_visible(False)
-                            self.line_mfc_sv[i].set_visible(False)
-                    except Exception as e:
-                        print(e)
-                else:
-                    rb_mfc = self.findChild(QRadioButton, f'RB_mfc_{i}')
-                    rb_mfc.setText(f'{i}: 未连接')
-                    rb_mfc.setEnabled(False)
-            except Exception as e:
-                print(e)
-        # 绘制更新后的图表
-        self.canvas_mfc.draw()
-
-    # slot functions for robot web page
-    def create_navigation_bar(self):
-        self.nav_bar = QToolBar()
-        self.addToolBar(Qt.TopToolBarArea, self.nav_bar)
-
-        self.back_button = QPushButton("Back")
-        self.back_button.clicked.connect(self.browser_view.back)
-        self.nav_bar.addWidget(self.back_button)
-
-        self.forward_button = QPushButton("Forward")
-        self.forward_button.clicked.connect(self.browser_view.forward)
-        self.nav_bar.addWidget(self.forward_button)
-
-        self.url_bar = QLineEdit()
-        self.url_bar.returnPressed.connect(self.load_url)
-        self.nav_bar.addWidget(self.url_bar)
-
-    def update_url_bar(self, url):
-        self.url_bar.setText(url)
-
-    def load_url(self):
-        url_text = self.url_bar.text()
-        if url_text:
-            self.browser_view.setUrl(QUrl(url_text))
-
-    def on_load_finished(self, result):
-        # 确保页面加载完成后，按钮状态正确
-        if result:
-            try:
-                js_code = """
-                 // 使用类名和类型属性选择器来获取输入框
-                 document.querySelector('.el-input__inner[type="text"]').value = 'admin';
-                 document.querySelector('.el-input__inner[type="password"]').value = 'admin';
-                 var inputEvent = new Event('input', {bubbles: true});
-                 document.querySelector('.el-input__inner[type="text"]').dispatchEvent(inputEvent);
-                 document.querySelector('.el-input__inner[type="password"]').dispatchEvent(inputEvent);
-                 """
-                # 在页面中执行JavaScript代码
-                self.browser_view.page().runJavaScript(js_code)
-                self.browser_view.page().runJavaScript("document.querySelector('.el-button.el-button--primary.el-button--large').click()")
-                self.back_button.setEnabled(self.browser_view.history().canGoBack())
-                self.forward_button.setEnabled(self.browser_view.history().canGoForward())
-            except Exception as e:
-                print(e)
 
     # slot functions for microscope camera
     def onTimer(self):
@@ -1067,7 +1451,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             except Exception as e:
                 print(f'{e}')
 
-
     def onBtnSnap2(self):
         try:
             if self.hcam:
@@ -1192,7 +1575,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.video_writer = cv2.VideoWriter(self.out_video_path, fourcc, frame_rate, resolution)
                 self.video_writer2 = cv2.VideoWriter(self.out_video_path2, fourcc, frame_rate, resolution)
 
-
     def stop_recording(self):
         if self.hcam:
             if self.is_recording:
@@ -1309,320 +1691,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     qimage.save(f'{out_image_path2}')
                     print(f'save image to {out_image_path2}')
 
-    # slot functions for TempCtrlDev
-    def showContextMenu(self, position):
-        # 创建右键菜单
-        try:
-            selected = self.tree_config.itemAt(position)
-            print(f'selected:{selected}')
-            menu = QMenu(self.tree_config)
-            addNewAction = QAction('添加', self.tree_config)
-            renameAction = QAction('重命名', self.tree_config)
-            editAction = QAction('编辑', self.tree_config)
-            deleteAction = QAction('删除', self.tree_config)
-            updateAction = QAction('刷新', self.tree_config)
-            if selected:
-                if selected == self.rootItem:
-                    # 添加动作到菜单
-                    menu.addAction(addNewAction)
-                    addNewAction.triggered.connect(self.addNewItem)
-                else:
-                    menu.addAction(editAction)
-                    menu.addAction(deleteAction)
-                    menu.addAction(renameAction)
-                    renameAction.triggered.connect(self.renameItem)
-                    editAction.triggered.connect(self.editItem)
-                    deleteAction.triggered.connect(self.deleteItem)
-            else:
-                menu.addAction(updateAction)
-                updateAction.triggered.connect(self.updateItem)
-            # 显示菜单
-            menu.exec_(self.tree_config.viewport().mapToGlobal(position))
-        except Exception as e:
-            print(e)
-
-    def addNewItem(self):
-        selected = self.tree_config.currentItem()
-        if not selected.parent():
-            newItem = QTreeWidgetItem(self.rootItem, ["New Program"])
-
-    def renameItem(self):
-        selected = self.tree_config.currentItem()
-        print(f'selected: {selected.text(0)}')
-        selected.setFlags(selected.flags() | Qt.ItemIsEditable)
-        self.tree_config.editItem(selected)
-        print(f'selected: {selected.text(0)}')
-        self.original_item_name = selected.text(0)
-
-    def handleItemChange(self, item, column):
-        # 当项被更改后，这个槽函数将被调用，并且接收被编辑的项和列索引
-        if column == 0:  # 通常第一列包含项的文本
-            filepath = os.path.join(temp_config_path, f'{self.original_item_name}.csv')
-            filename_new = item.text(0)
-            filepath_new = os.path.join(temp_config_path, f'{filename_new}.csv')
-            if os.path.exists(filepath):
-                try:
-                    os.rename(filepath, filepath_new)
-                    print(f'文件已重命名')
-                except OSError as e:
-                    print(f'重命名文件时出错： {e}')
-
-    def editItem(self):
-        # 编辑项的槽函数
-        selected = self.tree_config.currentItem()
-
-        if selected:
-            print(f'selected:{selected.text(0)}')
-            self.editFile(selected.text(0))
-
-    def deleteItem(self):
-        # 删除项的槽函数
-        selected = self.tree_config.currentItem()
-        if selected:
-            if selected.parent():
-                # 如果是子节点，从父节点移除
-                filepath = Path(os.path.join(temp_config_path, f'{selected.text(0)}.csv'))
-                if os.path.exists(filepath):
-                    try:
-                        filepath.unlink()
-                    except Exception as e:
-                        print(f'删除文件时出错： {e}')
-                selected.parent().takeChild(selected.parent().indexOfChild(selected))
-            else:
-                # 如果是顶级节点，从树中移除
-                self.tree_config.takeTopLevelItem(self.tree_config.indexOfTopLevelItem(selected))
-            # QMessageBox.information(self, "信息", "项已删除")
-
-    def updateItem(self):
-        while self.rootItem.childCount() > 0:
-            # takeChild 方法删除子节点
-            self.rootItem.takeChild(self.rootItem.childCount() - 1)
-        # 列出文件夹内的所有文件
-        for filepath in os.listdir(temp_config_path):
-            if filepath.endswith('.csv'):
-                # 获取文件的完整路径
-                file_path = os.path.join(temp_config_path, filepath)
-                # 创建一个新的QTreeWidgetItem并添加到QTreeWidget
-                item = QTreeWidgetItem(self.rootItem, [os.path.splitext(filepath)[0]])
-                item.setToolTip(0, file_path)
-        # 展开所有项以便查看
-        self.tree_config.expandAll()
-
-    def writeBuffer(self):
-        current_index = self.dialog.zoneComboBox.currentIndex()
-        print(f'current_index={current_index}')
-        idev = current_index + 1
-        try:
-            if self.worker_temp:
-                for row in range(self.dialog.tableWidget.rowCount()):
-                    row_data = []
-                    for column in range(self.dialog.tableWidget.columnCount()):
-                        # 检查项是否存在，如果不存在则添加空字符串
-                        item = self.dialog.tableWidget.item(row, column) if self.dialog.tableWidget.item(row, column) else None
-                        row_data.append(item.text() if item else '')
-                        print(f'item: {item.text() if item else ""}, row: {row}, column: {column}')
-                        if item:
-                            if column != 0 and item.text():
-                                iparam = row * 2 + column + 79
-                                value = float(item.text())
-                                print(f'iparam: {iparam}, value: {value}')
-                                self.worker_temp.write_data(TempInputData(iParamNo=iparam, Value=value, iDevAdd=idev))
-                        else:
-                            break
-                if idev == 1:
-                    self.lbl_buffer_a.setText(f'{self.dialog.filename}')
-                else:
-                    self.lbl_buffer_b.setText(f'{self.dialog.filename}')
-                self.dialog.saveTable()
-                QMessageBox.information(None, "文件写入", "文件写入成功！", QMessageBox.Ok)
-                self.worker_temp.read_program_settings()
-        except Exception as e:
-            print(f"An error occurred while writing to the Buffer: {e}")
-            QMessageBox.critical(self, "Error", f"An error occurred while writing to the Buffer: {e}")
-
-    def onConnectTempDev(self):
-        if self.worker_temp:
-            self.close_temp()
-        else:
-            self.start_temp()
-
-    def start_temp(self):
-        try:
-            print(f'CBB_temp_port:{self.CBB_temp_port.currentText()}')
-            self.worker_temp = TempWorker(portName=f"{self.CBB_temp_port.currentText()}", baudRate=9600)
-        except Exception as e:
-            print(f"An error occurred connect to temperature control device: {e}")
-            QMessageBox.critical(self, "Error", f"An error occurred connect to temperature control device: {e}")
-
-        if self.worker_temp:
-            self.timer_temperature_window.start(self.temp_time_interval)
-            self.worker_temp.result_signal.connect(self.handle_result_temp)
-            self.worker_temp.program_signal.connect(self.handle_result_pgm)
-            self.worker_temp.start()
-            self.worker_temp.read_program_settings()
-            self.BT_run_a.setEnabled(True)
-            self.BT_hold_a.setEnabled(True)
-            self.BT_stop_a.setEnabled(True)
-            self.BT_run_b.setEnabled(True)
-            self.BT_hold_b.setEnabled(True)
-            self.BT_stop_b.setEnabled(True)
-            self.tree_config.setEnabled(True)
-            self.createTempFig()
-            self.BT_connect_tempDev.setText("断开")
-
-    def close_temp(self):
-        try:
-            self.timer_temperature_window.stop()
-            self.worker_temp.stop_run()
-            self.worker_temp=None
-            self.figure_a.clf()
-            self.canvas_a.draw()
-            self.VLayout_tempDisplay_a.removeWidget(self.canvas_a)
-            self.canvas_a = None
-            self.figure_b.clf()
-            self.canvas_b.draw()
-            self.VLayout_tempDisplay_b.removeWidget(self.canvas_b)
-            self.canvas_b = None
-            self.lbl_pv_a.clear()
-            self.lbl_sv_a.clear()
-            self.lbl_mv_a.clear()
-            self.lbl_step_a.clear()
-            self.lbl_time_a.clear()
-            self.lbl_pv_b.clear()
-            self.lbl_sv_b.clear()
-            self.lbl_mv_b.clear()
-            self.lbl_step_b.clear()
-            self.lbl_time_b.clear()
-            self.psbar_a.setValue(0)
-            self.psbar_b.setValue(0)
-            self.BT_run_a.setEnabled(False)
-            self.BT_hold_a.setEnabled(False)
-            self.BT_stop_a.setEnabled(False)
-            self.BT_run_b.setEnabled(False)
-            self.BT_hold_b.setEnabled(False)
-            self.BT_stop_b.setEnabled(False)
-            self.tree_config.setEnabled(False)
-            self.BT_stop_a.setStyleSheet(self.default_color)
-            self.BT_hold_a.setStyleSheet(self.default_color)
-            self.BT_run_a.setStyleSheet(self.default_color)
-            self.BT_stop_b.setStyleSheet(self.default_color)
-            self.BT_hold_b.setStyleSheet(self.default_color)
-            self.BT_run_b.setStyleSheet(self.default_color)
-            self.BT_connect_tempDev.setText("连接")
-        except Exception as e:
-            print(f'An error occurred when close temp: {e}')
-
-    def onSetTempThreshold(self):
-        if self.IsThresholdSet:
-            self.cancel_threshold()
-        else:
-            self.set_threshold()
-
-    def set_threshold(self):
-        try:
-            temp_threshold_low = self.SB_temp_threshold_low.text()
-            temp_threshold_high = self.SB_temp_threshold_high.text()
-            if temp_threshold_low and temp_threshold_high:
-                self.temp_threshold_low = int(temp_threshold_low)
-                self.temp_threshold_high = int(temp_threshold_high)
-                print(f'set temp threshold: {self.temp_threshold_low} - {self.temp_threshold_high}')
-            self.BT_set_temp_threshold.setChecked(True)
-            self.BT_set_temp_threshold.setText("取消设定")
-            self.IsThresholdSet = True
-        except Exception as e:
-            print(f'An error occurred when set temp threshold: {e}')
-
-    def cancel_threshold(self):
-        self.BT_set_temp_threshold.setChecked(False)
-        self.BT_set_temp_threshold.setText("设定")
-        self.temp_threshold_low = None
-        self.temp_threshol_high = None
-        self.SB_temp_threshold_low.clear()
-        self.SB_temp_threshold_high.clear()
-        self.IsThresholdSet = False
-
-    def onConnectSignalComm(self):
-        if self.rtu_server:
-            self.close_signalcomm()
-        else:
-            self.start_signalcomm()
-
-    def start_signalcomm(self):
-        try:
-            self.signal_comm = serial.Serial(port=f"{self.CBB_signal_port.currentText()}", baudrate=9600, bytesize=8, parity='N', stopbits=1)
-            self.rtu_server = modbus_rtu.RtuServer(self.signal_comm)
-        except Exception as e:
-            print(f"An error occurred connect to PLC: {e}")
-            QMessageBox.critical(self, "Error", f"An error occurred connect to PCL: {e}")
-        if self.rtu_server:
-            self.rtu_server.start()
-            self.slave = self.rtu_server.add_slave(3)
-            self.slave.add_block('0', cst.HOLDING_REGISTERS, 0, 1200)
-            self.slave.add_block('1', cst.COILS, 0, 10)
-            self.BT_set_temp_threshold.setEnabled(True)
-            self.BT_sendSignal.setEnabled(True)
-            self.BT_connect_signalComm.setText("断开")
-
-    def close_signalcomm(self):
-        self.rtu_server.remove_slave(3)
-        self.rtu_server.stop()
-        self.rtu_server = None
-        self.slave = None
-        self.signal_comm = None
-        self.cancel_threshold()
-        self.BT_set_temp_threshold.setEnabled(False)
-        self.BT_sendSignal.setEnabled(False)
-        self.SB_temp_threshold_low.clear()
-        self.SB_temp_threshold_high.clear()
-        self.BT_connect_signalComm.setText("连接")
-
-    def handle_result_pgm(self, result):
-        self.program_a, self.program_b = copy.deepcopy(result)
-        print(f'program a: {self.program_a}')
-        print(f'program b: {self.program_b}')
-
-    def handle_result_temp(self, result):
-        self.tempdevData = copy.deepcopy(result)
-        # print(f'temp result updated')
-
-    def onRunA(self):
-        if self.worker_temp:
-            self.is_final_step_a = False
-            self.BT_run_a.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=0, iDevAdd=1))
-            print(f'runA')
-
-    def onRunB(self):
-        if self.worker_temp:
-            self.is_final_step_b = False
-            self.BT_run_b.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=0, iDevAdd=2))
-            print(f'runB')
-
-    def onHoldA(self):
-        if self.worker_temp:
-            self.BT_hold_a.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=2, iDevAdd=1))
-            print(f'holdA')
-
-    def onHoldB(self):
-        if self.worker_temp:
-            self.BT_hold_b.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=2, iDevAdd=2))
-            print(f'holdB')
-
-    def onStopA(self):
-        if self.worker_temp:
-            self.BT_stop_a.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=1, iDevAdd=1))
-            print(f'stopA')
-
-    def onStopB(self):
-        if self.worker_temp:
-            self.BT_stop_b.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=1, iDevAdd=2))
-            print(f'stopB')
-
     def add_text_to_image(self, image, text, position, size):
         # 创建一个新的QImage对象，内容是原始图像的副本
         new_image = image.copy()
@@ -1645,7 +1713,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 创建 QPainter 对象
         painter = QPainter(image)
         painter.setPen(QPen(default_color, default_width))  # 设置线段颜色和宽度
-
         # 创建 QLineF 对象表示线段
         line = QLineF(start_point, end_point)
         # 绘制主线段
@@ -1682,173 +1749,82 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         # 检查图像是否为8位
         if cv_image.dtype != np.uint8:
             raise ValueError("OpenCV图像必须是8位的")
-
         # 确保图像具有4个通道
         if cv_image.shape[2] != 4:
             raise ValueError("图像必须有4个通道")
-
         # 将OpenCV图像数据转换为QImage
         q_image = QImage(cv_image.data, cv_image.shape[1], cv_image.shape[0], QImage.Format_RGBA8888)
-
         return q_image
 
-    def updateTempData(self):
-        # 将温度值显示在QLineEdit中
-        ctime = time.time()
-        if self.tempdevData[0]:
-            self.lbl_pv_a.setText(str(self.tempdevData[0].pv))
-            self.lbl_sv_a.setText(str(self.tempdevData[0].sv))
-            self.lbl_mv_a.setText(str(self.tempdevData[0].mv))
-            self.lbl_step_a.setText(str(self.tempdevData[0].step))
-            self.lbl_time_a.setText(str(self.tempdevData[0].tim))
-            if self.tempdevData[0].state == 0:
-                self.BT_run_a.setChecked(True)
-                self.BT_run_a.setStyleSheet(self.selected_color)
-                self.BT_hold_a.setStyleSheet(self.default_color)
-                self.BT_stop_a.setStyleSheet(self.default_color)
-            elif self.tempdevData[0].state == 1:
-                self.BT_stop_a.setChecked(True)
-                self.BT_stop_a.setStyleSheet(self.selected_color)
-                self.BT_hold_a.setStyleSheet(self.default_color)
-                self.BT_run_a.setStyleSheet(self.default_color)
-            elif self.tempdevData[0].state == 2:
-                self.BT_hold_a.setChecked(True)
-                self.BT_hold_a.setStyleSheet(self.selected_color)
-                self.BT_run_a.setStyleSheet(self.default_color)
-                self.BT_stop_a.setStyleSheet(self.default_color)
-            else:
-                print(f'state_a error')
+    # ROBOT RELATED
+    def init_robot_ui(self):
+        self.browser_view = WebEngineView()
+        self.VLayout_robot.addWidget(self.browser_view, stretch=1)
 
-        if self.tempdevData[1]:
-            self.lbl_pv_b.setText(str(self.tempdevData[1].pv))
-            self.lbl_sv_b.setText(str(self.tempdevData[1].sv))
-            self.lbl_mv_b.setText(str(self.tempdevData[1].mv))
-            self.lbl_step_b.setText(str(self.tempdevData[1].step))
-            self.lbl_time_b.setText(str(self.tempdevData[1].tim))
-            if self.tempdevData[1].state == 0:
-                self.BT_run_b.setChecked(True)
-                self.BT_run_b.setStyleSheet(self.selected_color)
-                self.BT_hold_b.setStyleSheet(self.default_color)
-                self.BT_stop_b.setStyleSheet(self.default_color)
-            elif self.tempdevData[1].state == 1:
-                self.BT_stop_b.setChecked(True)
-                self.BT_stop_b.setStyleSheet(self.selected_color)
-                self.BT_hold_b.setStyleSheet(self.default_color)
-                self.BT_run_b.setStyleSheet(self.default_color)
-            elif self.tempdevData[1].state == 2:
-                self.BT_hold_b.setChecked(True)
-                self.BT_hold_b.setStyleSheet(self.selected_color)
-                self.BT_run_b.setStyleSheet(self.default_color)
-                self.BT_stop_b.setStyleSheet(self.default_color)
-            else:
-                print(f'state_b error')
+        self.create_navigation_bar()
+        self.browser_view.load(QUrl("http://192.168.0.10/dist/#/login"))
 
-        try:
-            self.total_set_time_a = sum(self.program_a[1][:-1])
-            self.total_set_time_b = sum(self.program_b[1][:-1])
-            if self.tempdevData[0]:
-                # 绘制ZoneA温度曲线
-                if self.total_set_time_a and self.total_set_time_b:
-                    self.temp_time_range = max(self.total_set_time_a, self.total_set_time_b) * 60
-                    print(f'temp_time_range: {self.temp_time_range}')
-                x_data_pv_a, y_data_pv_a = self.line_pv_a.get_data()
-                if len(x_data_pv_a) > self.temp_time_range * self.temp_fps:
-                    x_data_pv_a = []
-                    y_data_pv_a = []
-                    self.ax_a.set_xlim(ctime, ctime + self.temp_time_range - 1)
-                    xticks = [ctime + i * self.temp_time_range / 4 for i in range(5)]
-                    xlabels = [datetime.fromtimestamp(ts).strftime('%H:%M:%S') for ts in xticks]
-                    self.ax_a.set_xticks(xticks, xlabels)
-                x_data_pv_a = np.append(x_data_pv_a, ctime)
-                y_data_pv_a = np.append(y_data_pv_a, self.tempdevData[0].pv)
+        self.browser_view.loadFinished.connect(self.on_load_finished)
 
-                x_data_sv_a, y_data_sv_a = self.line_sv_a.get_data()
-                if len(x_data_sv_a) > self.temp_time_range * self.temp_fps:
-                    x_data_sv_a = []
-                    y_data_sv_a = []
-                x_data_sv_a = np.append(x_data_sv_a, ctime)
-                y_data_sv_a = np.append(y_data_sv_a, self.tempdevData[0].sv)
-                # 更新图形
-                self.line_pv_a.set_data(x_data_pv_a, y_data_pv_a)
-                self.line_sv_a.set_data(x_data_sv_a, y_data_sv_a)
-                self.ax_a.set_ylim(-5, self.max_temperature_a)
-                self.ax_a.relim()  # 重新计算坐标轴的界限
-                self.ax_a.autoscale_view(True, True, True)  # 自动缩放
-                self.canvas_a.draw()  # 重绘画布
-            if self.tempdevData[1]:
-                # 绘制ZoneB温度曲线
-                x_data_pv_b, y_data_pv_b = self.line_pv_b.get_data()
-                if len(x_data_pv_b) > self.temp_time_range * self.temp_fps:
-                    x_data_pv_b = []
-                    y_data_pv_b = []
-                    self.ax_b.set_xlim(ctime, ctime + self.temp_time_range - 1)
-                    xticks = [ctime + i * self.temp_time_range / 4 for i in range(5)]
-                    xlabels = [datetime.fromtimestamp(ts).strftime('%H:%M:%S') for ts in xticks]
-                    self.ax_b.set_xticks(xticks, xlabels)
-                x_data_pv_b = np.append(x_data_pv_b, ctime)
-                y_data_pv_b = np.append(y_data_pv_b, self.tempdevData[1].pv)
+    def create_navigation_bar(self):
+        self.nav_bar = QToolBar()
+        self.addToolBar(Qt.TopToolBarArea, self.nav_bar)
 
-                x_data_sv_b, y_data_sv_b = self.line_sv_b.get_data()
-                if len(x_data_sv_b) > self.temp_time_range * self.temp_fps:
-                    x_data_sv_b = []
-                    y_data_sv_b = []
-                x_data_sv_b = np.append(x_data_sv_b, ctime)
-                y_data_sv_b = np.append(y_data_sv_b, self.tempdevData[1].sv)
-                # 更新图形
-                self.line_pv_b.set_data(x_data_pv_b, y_data_pv_b)
-                self.line_sv_b.set_data(x_data_sv_b, y_data_sv_b)
-                self.ax_b.set_ylim(-5, self.max_temperature_b)
-                self.ax_b.relim()  # 重新计算坐标轴的界限
-                self.ax_b.autoscale_view(True, True, True)  # 自动缩放
-                self.canvas_b.draw()  # 重绘画布
+        self.back_button = QPushButton("Back")
+        self.back_button.clicked.connect(self.browser_view.back)
+        self.nav_bar.addWidget(self.back_button)
 
-            # 绘制进度条
+        self.forward_button = QPushButton("Forward")
+        self.forward_button.clicked.connect(self.browser_view.forward)
+        self.nav_bar.addWidget(self.forward_button)
+
+        self.url_bar = QLineEdit()
+        self.url_bar.returnPressed.connect(self.load_url)
+        self.nav_bar.addWidget(self.url_bar)
+
+    def update_url_bar(self, url):
+        self.url_bar.setText(url)
+
+    def load_url(self):
+        url_text = self.url_bar.text()
+        if url_text:
+            self.browser_view.setUrl(QUrl(url_text))
+
+    def on_load_finished(self, result):
+        # 确保页面加载完成后，按钮状态正确
+        if result:
             try:
-                if self.tempdevData[0]:
-                    if self.program_a[1]:
-                        if self.is_final_step_a and self.tempdevData[0].step == 1:
-
-                            progress_time_a = self.total_set_time_a
-                        else:
-                            progress_time_a = sum(self.program_a[1][:self.tempdevData[0].step - 1]) + self.tempdevData[
-                                0].tim
-                        progress_percent_a = int(progress_time_a / self.total_set_time_a * 100)
-
-                        self.psbar_a.setValue(progress_percent_a)
-                        self.max_temperature_a = max(self.max_temperature_a, max(self.tempdevData[0].pv,
-                                                     self.tempdevData[0].sv) * 1.4)
-                    else:
-                        self.max_temperature_a = max(self.max_temperature_a, max(self.tempdevData[0].pv,
-                                                     self.tempdevData[0].sv) * 1.4)
-                        self.psbar_a.setValue(0)
-                if self.tempdevData[1]:
-                    if self.program_b[1]:
-
-                        if self.is_final_step_b and self.tempdevData[1].step == 1:
-                            progress_time_b = self.total_set_time_b
-                        else:
-                            progress_time_b = sum(self.program_b[1][:self.tempdevData[1].step - 1]) + self.tempdevData[
-                                1].tim
-                        progress_percent_b = int(progress_time_b / self.total_set_time_b * 100)
-                        self.psbar_b.setValue(progress_percent_b)
-                        self.max_temperature_b = max(self.max_temperature_b, max(self.tempdevData[1].pv,
-                                                     self.tempdevData[1].sv) * 1.4)
-                    else:
-                        self.max_temperature_b = max(self.max_temperature_b, max(self.tempdevData[1].pv,
-                                                     self.tempdevData[1].sv) * 1.4)
-                        self.psbar_b.setValue(0)
+                js_code = """
+                 // 使用类名和类型属性选择器来获取输入框
+                 document.querySelector('.el-input__inner[type="text"]').value = 'admin';
+                 document.querySelector('.el-input__inner[type="password"]').value = 'admin';
+                 var inputEvent = new Event('input', {bubbles: true});
+                 document.querySelector('.el-input__inner[type="text"]').dispatchEvent(inputEvent);
+                 document.querySelector('.el-input__inner[type="password"]').dispatchEvent(inputEvent);
+                 """
+                # 在页面中执行JavaScript代码
+                self.browser_view.page().runJavaScript(js_code)
+                self.browser_view.page().runJavaScript("document.querySelector('.el-button.el-button--primary.el-button--large').click()")
+                self.back_button.setEnabled(self.browser_view.history().canGoBack())
+                self.forward_button.setEnabled(self.browser_view.history().canGoForward())
             except Exception as e:
                 print(e)
 
-        except Exception as e:
-            print(e)
+    def onSettings(self):
+        if self.showSettings == True:
+            self.widget_settings.hide()
+            self.showSettings = False
+            self.BT_settings.setText(">")
+        else:
+            self.widget_settings.show()
+            self.showSettings = True
+            self.BT_settings.setText("<")
 
     def cleanMFC(self):
         # 清洗180秒
         self.counter = 180
         self.onSwitchClean()
         self.startCounting = True
-
 
     def onSendSignal(self):
         '''发送开炉信号'''
@@ -1988,7 +1964,7 @@ if __name__ == '__main__':
     }
     """
     qdarktheme.setup_theme("dark", additional_qss=qss)
-    mw = MainWindow()
+    mw = AICVD()
     mw.show()
     sys.exit(app.exec_())
 

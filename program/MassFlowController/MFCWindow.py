@@ -3,7 +3,6 @@ import os
 import sys
 import time
 from queue import Queue
-
 import numpy as np
 import serial
 import serial.tools.list_ports
@@ -11,13 +10,7 @@ from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QMutex, Qt, QTime
 from PyQt5.QtWidgets import QMainWindow, QMessageBox, QApplication, QButtonGroup, QLabel, QWidget, QDialog, \
     QTableWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QDialogButtonBox, QTableWidgetItem, QFileDialog, \
     QHeaderView, QTimeEdit
-from matplotlib import pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-from matplotlib.ticker import MultipleLocator
-
 from program.MassFlowController.mfcdev import MFCComm
-from program.Mainwindow import Ui_MainWindow
 
 BASE_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
 mfc_config_path = os.path.join(BASE_DIR, 'config', 'mfc_config')
@@ -202,7 +195,7 @@ class MFCWorker(QThread):
 
     def run(self):
         try:
-            while not self.stop:
+            while True:
                 while True:
                     if self.data_queue.empty():
                         break
@@ -212,6 +205,8 @@ class MFCWorker(QThread):
                 if result:
                     self.result_signal.emit(result)
                 if self.stop:
+                    self.mfc_comm.DisConnect()
+                    self.mfc_comm = None
                     break
                 self.sleep(1)
         except Exception as e:
@@ -268,236 +263,3 @@ class MFCWorker(QThread):
         self.mfc_comm.DisConnect()
         self.mfc_comm = None
 
-
-class MFCWindow(QMainWindow, Ui_MainWindow):
-    def __init__(self, parent=None):
-        super(MFCWindow, self).__init__(parent)
-        self.mfcData_2 = MFCOutputData()
-        self.mfcData_0 = MFCOutputData()
-        self.button_group = None
-        self.mfc_comm = None
-        self.setupUi(self)
-        self.init_mfc_ui()
-
-    def init_mfc_ui(self):
-        ports_list = list(serial.tools.list_ports.comports())
-        ports_name = [port.name for port in ports_list]
-        self.CBB_mfc_port.clear()
-        self.CBB_mfc_port.addItems(ports_name)
-        baudrate_list = ["4800", "9600", "19200", "38400", "43000", "56000", "57600"]
-        self.BT_set_mfc_sv.clicked.connect(self.onSetSV)
-        self.CBB_mfc_buadrate.clear()
-        self.CBB_mfc_buadrate.addItems(baudrate_list)
-        self.button_group = QButtonGroup()
-        self.button_group.addButton(self.RB_0, 0)
-        self.button_group.addButton(self.RB_2, 2)
-
-        # 创建一个Figure和FigureCanvas
-        self.figure_mfc = Figure()
-        self.canvas_mfc = FigureCanvas(self.figure_mfc)
-        self.ax_mfc = self.figure_mfc.add_subplot(111)
-        self.VLayout_mfc_display.addWidget(self.canvas_mfc)
-        #初始化图表
-        self.ax_mfc.set_xlim(0, 20)  # 设置x轴的范围，可以根据需要调整
-        self.ax_mfc.set_ylim(0, 100)  # 设置y轴的范围
-        self.line_mfc_pv_0, = self.ax_mfc.plot([], [], 'r-')  # 'r-' 表示红色线条
-        self.line_mfc_sv_0, = self.ax_mfc.plot([], [], 'b-')  # 'r-' 表示红色线条
-        self.line_mfc_pv_2, = self.ax_mfc.plot([], [], 'r-')  # 'r-' 表示红色线条
-        self.line_mfc_sv_2, = self.ax_mfc.plot([], [], 'b-')  # 'r-' 表示红色线条
-        self.ax_mfc.xaxis.set_major_locator(MultipleLocator(4))
-
-        self.timer_mfc = QTimer(self)
-        self.timer_mfc.timeout.connect(self.updateMFCData)
-        self.timer_mfc.start(1000)
-
-    def onConnectMFC(self):
-        try:
-            print(f'CBB_temp_port:{self.CBB_temp_port.currentText()}')
-            self.mfc_comm = MFCComm(portName=self.CBB_mfc_port.currentText(), baudRate=self.CBB_mfc_buadrate.currentText())
-        except Exception as e:
-            print(f"An error occurred connect to mfc comm: {e}")
-            QMessageBox.critical(self, "Error", f"An error occurred connect to mfc comm: {e}")
-
-    def onSetSV(self):
-        print(f'set value')
-        if self.mfc_comm:
-            try:
-                sv = self.SB_mfc_sv.value()
-                self.mfc_comm.write_sv(value=sv, id=self.button_group.checkedId())
-            except Exception as e:
-                print(f"An error occurred when set mfc value: {e}")
-                QMessageBox.critical(self, "Error", f"An error occurred when set mfc value: {e}")
-
-    def onValueCtrl(self):
-        self.mfc_comm.write_switch(value=True, id=self.button_group.checkedId(), addr=1)
-
-    def onSwitchClean(self):
-        self.mfc_comm.write_switch(value=True, id=self.button_group.checkedId(), addr=2)
-
-    def onSwitchClose(self):
-        self.mfc_comm.write_switch(value=True, id=self.button_group.checkedId(), addr=0)
-
-    def onAnalogMode(self):
-        self.mfc_comm.write_switch(value=False, id=self.button_group.checkedId(), addr=3)
-
-    def onDigitalMode(self):
-        self.mfc_comm.write_switch(value=True, id=self.button_group.checkedId(), addr=3)
-
-    def readMFCParam(self):
-        try:
-            if self.mfc_comm:
-                sv_0 = self.mfc_comm.read_sv(id=0)
-                pv_0 = self.mfc_comm.read_pv(id=0)
-                sv_2 = self.mfc_comm.read_sv(id=2)
-                pv_2 = self.mfc_comm.read_pv(id=2)
-                cmode_0 = self.mfc_comm.read_switch_single(id=0, addr=3)
-                cmode_2 = self.mfc_comm.read_switch_single(id=2, addr=3)
-                switch_state_0 = self.mfc_comm.read_switch_vctrl(id=0)
-                switch_state_2 = self.mfc_comm.read_switch_vctrl(id=2)
-                self.mfcData_0 = MFCOutputData(pv=pv_0, sv=sv_0, ctrl_mode=cmode_0, switch_state=switch_state_0)
-                self.mfcData_2 = MFCOutputData(pv=pv_2, sv=sv_2, ctrl_mode=cmode_2, switch_state=switch_state_2)
-        except Exception as e:
-            print(f'An error occurred when read mfc parameter: {e}')
-
-    def updateMFCData(self):
-        # 读取MFC参数
-        self.readMFCParam()
-        # 显示流量设定值和实际值
-        self.lbl_pv_mfc0.setText(str(self.mfcData_0.pv))
-        self.lbl_sv_mfc0.setText(str(self.mfcData_0.sv))
-        self.lbl_pv_mfc2.setText(str(self.mfcData_2.pv))
-        self.lbl_sv_mfc2.setText(str(self.mfcData_2.sv))
-        # 显示控制模式
-        if self.button_group.checkedId() == 0:
-            if self.mfcData_0.ctrl_mode == -1:
-                self.RB_mfc_crtllock.setChecked(True)
-            elif self.mfcData_0.ctrl_mode == 0:
-                self.RB_mfc_analog.setChecked(True)
-            elif self.mfcData_0.ctrl_mode == 1:
-                self.RB_mfc_digital.setChecked(True)
-            else:
-                print(f'ctrl mode error')
-        elif self.button_group.checkedId() == 2:
-            if self.mfcData_2.ctrl_mode == -1:
-                self.RB_mfc_crtllock.setChecked(True)
-            elif self.mfcData_2.ctrl_mode == 0:
-                self.RB_mfc_analog.setChecked(True)
-            elif self.mfcData_2.ctrl_mode == 1:
-                self.RB_mfc_digital.setChecked(True)
-            else:
-                print(f'ctrl mode error')
-        else:
-            print(f'MFC Dev number is not Chosen')
-        # 显示阀控状态
-        if self.button_group.checkedId() == 0:
-            if self.mfcData_0.switch_state == -1:
-                self.RB_mfc_switchlock.setChecked(True)
-            elif self.mfcData_0.switch_state == 1:
-                self.RB_mfc_close.setChecked(True)
-            elif self.mfcData_0.switch_state == 2:
-                self.RB_mfc_vctrl.setChecked(True)
-            elif self.mfcData_0.switch_state == 4:
-                self.RB_mfc_clean.setChecked(True)
-            else:
-                print(f'switch state error')
-        elif self.button_group.checkedId() == 2:
-            if self.mfcData_2.switch_state == -1:
-                self.RB_mfc_switchlock.setChecked(True)
-            elif self.mfcData_2.switch_state == 1:
-                self.RB_mfc_close.setChecked(True)
-            elif self.mfcData_2.switch_state == 2:
-                self.RB_mfc_vctrl.setChecked(True)
-            elif self.mfcData_2.switch_state == 4:
-                self.RB_mfc_clean.setChecked(True)
-            else:
-                print(f'switch state error')
-        else:
-            print(f'MFC Dev number is not Chosen')
-        if ((self.button_group.checkedId() == 0 and self.mfcData_0.switch_state == 2 and self.mfcData_0.ctrl_mode == 1)
-                or (self.button_group.checkedId() == 2 and self.mfcData_2.switch_state == 2 and
-                    self.mfcData_2.ctrl_mode == 1)):
-            self.BT_set_mfc_sv.setEnabled(True)
-        # 绘制mfc_0流量曲线
-        current_time = time.time()
-        # 更新line_mfc_pv_0
-        pv_0 = np.random.randint(0, 10)  # 随机生成流量值
-        xdata_mfc_pv_0, ydata_mfc_pv_0 = self.line_mfc_pv_0.get_data()
-        xdata_mfc_pv_0 = np.append(xdata_mfc_pv_0, current_time)
-        ydata_mfc_pv_0 = np.append(ydata_mfc_pv_0, pv_0)
-        # 限制数据点数量，避免内存无限增长
-        if len(xdata_mfc_pv_0) > 30:  # 保留最近120个数据点，即2分钟
-            xdata_mfc_pv_0 = xdata_mfc_pv_0[-30:]
-            ydata_mfc_pv_0 = ydata_mfc_pv_0[-30:]
-        # 更新line_mfc_sv_0
-        sv_0 = 10
-        xdata_mfc_sv_0, ydata_mfc_sv_0 = self.line_mfc_sv_0.get_data()
-        xdata_mfc_sv_0 = np.append(xdata_mfc_sv_0, current_time)
-        ydata_mfc_sv_0 = np.append(ydata_mfc_sv_0, sv_0)
-        # 限制数据点数量，避免内存无限增长
-        if len(xdata_mfc_sv_0) > 30:  # 保留最近120个数据点，即2分钟
-            xdata_mfc_sv_0 = xdata_mfc_sv_0[-30:]
-            ydata_mfc_sv_0 = ydata_mfc_sv_0[-30:]
-
-        # 更新line_mfc_pv_2
-        pv_2 = np.random.randint(0, 10)  # 随机生成流量值
-        xdata_mfc_pv_2, ydata_mfc_pv_2 = self.line_mfc_pv_2.get_data()
-        xdata_mfc_pv_2 = np.append(xdata_mfc_pv_2, current_time)
-        ydata_mfc_pv_2 = np.append(ydata_mfc_pv_2, pv_2)
-        # 限制数据点数量，避免内存无限增长
-        if len(xdata_mfc_pv_2) > 30:  # 保留最近120个数据点，即2分钟
-            xdata_mfc_pv_2 = xdata_mfc_pv_2[-30:]
-            ydata_mfc_pv_2 = ydata_mfc_pv_2[-30:]
-        # 更新line_mfc_sv_2
-        sv_2 = 10
-        xdata_mfc_sv_2, ydata_mfc_sv_2 = self.line_mfc_sv_2.get_data()
-        xdata_mfc_sv_2 = np.append(xdata_mfc_sv_2, current_time)
-        ydata_mfc_sv_2 = np.append(ydata_mfc_sv_2, sv_2)
-        # 限制数据点数量，避免内存无限增长
-        if len(xdata_mfc_sv_2) > 30:  # 保留最近120个数据点，即2分钟
-            xdata_mfc_sv_2 = xdata_mfc_sv_2[-30:]
-            ydata_mfc_sv_2 = ydata_mfc_sv_2[-30:]
-
-        # 更新图表
-        if self.button_group.checkedId() == 0:
-            self.line_mfc_pv_0.set_visible(True)
-            self.line_mfc_sv_0.set_visible(True)
-            self.line_mfc_pv_2.set_visible(False)
-            self.line_mfc_sv_2.set_visible(False)
-            self.line_mfc_pv_0.set_data(xdata_mfc_pv_0, ydata_mfc_pv_0)
-            self.line_mfc_sv_0.set_data(xdata_mfc_sv_0, ydata_mfc_sv_0)
-            self.ax_mfc.relim()  # 重新计算轴的限制
-            self.ax_mfc.autoscale_view()  # 自动缩放视图
-            # 滚动x轴
-            self.ax_mfc.set_xlim(max(0, xdata_mfc_pv_0[-1] - 20), xdata_mfc_pv_0[-1])
-            self.ax_mfc.set_ylim(0, 100)
-            # 绘制更新后的图表
-            self.canvas_mfc.draw()
-        elif self.button_group.checkedId() == 2:
-
-            self.line_mfc_pv_0.set_visible(False)
-            self.line_mfc_sv_0.set_visible(False)
-            self.line_mfc_pv_2.set_visible(True)
-            self.line_mfc_sv_2.set_visible(True)
-
-            self.line_mfc_pv_2.set_data(xdata_mfc_pv_2, ydata_mfc_pv_2)
-            self.line_mfc_sv_2.set_data(xdata_mfc_sv_2, ydata_mfc_sv_2)
-            self.ax_mfc.relim()  # 重新计算轴的限制
-            self.ax_mfc.autoscale_view()  # 自动缩放视图
-            # 滚动x轴
-            self.ax_mfc.set_xlim(max(0, xdata_mfc_pv_2[-1] - 20), xdata_mfc_pv_2[-1])
-            self.ax_mfc.set_ylim(0, 500)
-            # 绘制更新后的图表
-            self.canvas_mfc.draw()
-        else:
-            print(f'MFC Dev number is not Chosen')
-
-
-
-if __name__ == "__main__":
-    try:
-        app = QApplication(sys.argv)
-        mw = MFCWindow()
-        mw.show()
-        sys.exit(app.exec_())
-    except Exception as e:
-        print(e)
