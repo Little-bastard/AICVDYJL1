@@ -12,9 +12,9 @@ import pandas as pd
 import serial
 from PyQt5.QtCore import QTimer, QSignalBlocker, Qt, pyqtSignal, QUrl, QCoreApplication, QPoint, QLineF, QSize, QTime
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QFont, QColor
-from PyQt5.QtWidgets import QMainWindow, QHBoxLayout, QVBoxLayout, QMessageBox, QMenu, QAction, QApplication, QDialog, \
-    QFileDialog, QTreeWidgetItem, QLabel, QToolBar, QPushButton, QLineEdit, QButtonGroup, QRadioButton, QSizePolicy, \
-    QToolTip
+from PyQt5.QtWidgets import (QMainWindow, QMessageBox, QMenu, QAction, QApplication, QDialog, QFileDialog,
+                             QTreeWidgetItem, QLabel, QToolBar, QPushButton, QLineEdit, QButtonGroup, QRadioButton,
+                             QSizePolicy, QToolTip)
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import qdarktheme
@@ -39,6 +39,7 @@ temp_config_path = os.path.join(BASE_DIR, 'config', "temp_config")
 
 class AICVD(QMainWindow, Ui_MainWindow):
     evtCallback = pyqtSignal(int)
+
     def __init__(self, parent=None):
         super(AICVD, self).__init__(parent)
         self.timer_temperature_window = None
@@ -113,7 +114,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
             }
             with open(f'{config_directory_path}/profile.json', 'w', encoding='utf-8') as profile:
                 json.dump(current_profile, profile, ensure_ascii=False, indent=4)
-            print(f'snap configuration: {current_profile}')
+            print(f'保存实验状态到文件：{current_profile}')
             # 创建一个只有表头的空Excel表用于保存每轮实验的结果
             df = pd.read_excel(self.cfg_file, sheet_name='Sheet1')
             columns = df.columns.tolist() + ["Video_name", "Date"]
@@ -358,6 +359,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 value = self.dialog.tableWidget.item(row, 1).text()
                 self.mfc_schedules[idev][t] = value
             print(f'dev {idev} schedules: {self.mfc_schedules[idev]}')
+            self.dialog.saveTable()
+            QMessageBox.information(None, "文件写入", "文件写入成功！", QMessageBox.Ok)
         except Exception as e:
             print(e)
 
@@ -411,7 +414,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def startMFC(self):
         try:
-            print(f'CBB_temp_port:{self.CBB_temp_port.currentText()}')
+            print(f'CBB_mfc_port:{self.CBB_mfc_port.currentText()}')
             self.worker_mfc = MFCWorker(portName=self.CBB_mfc_port.currentText(),
                                         baudRate=self.CBB_mfc_buadrate.currentText())
         except Exception as e:
@@ -757,7 +760,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         # 展开所有项以便查看
         self.tree_config.expandAll()
 
-    def writeBuffer(self):
+    def writeTempProgram(self):
         current_index = self.dialog.zoneComboBox.currentIndex()
         print(f'current_index={current_index}')
         idev = current_index + 1
@@ -1239,8 +1242,16 @@ class AICVD(QMainWindow, Ui_MainWindow):
     # slot functions for microscope camera
     def onTimer(self):
         if self.hcam:
-            nFrame, nTime, nTotalFrame = self.hcam.get_FrameRate()
-            self.lbl_frame.setText("{}, fps = {:.1f}".format(nTotalFrame, nFrame * 1000.0 / nTime))
+            try:
+                nFrame, nTime, nTotalFrame = self.hcam.get_FrameRate()
+                if nTime != 0:
+                    self.lbl_frame.setText("{}, fps = {:.1f}".format(nTotalFrame, nFrame * 1000.0 / nTime))
+            except Exception as e:
+                print(f'An error occurred when set nFrame: {e}')
+            self.updateImage()
+            # 刷新比例尺和显微图像尺寸
+            self.onMagnificationChanged()
+
 
     def closeCamera(self):
         try:
@@ -1372,7 +1383,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 self.btn_save.setEnabled(True)
                 bAuto = self.hcam.get_AutoExpoEnable()
                 self.cbox_auto.setChecked(1 == bAuto)
-                self.timer_camera.start(1000)
+                self.timer_camera.start(100)
         except Exception as e:
             print(f'An error occurred when start camera: {e}')
 
@@ -1613,30 +1624,31 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.hcam.PullImageV3(self.pData, 0, 24, 0, None)
         except toupcam.HRESULTException:
             pass
-        else:
-            image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
-            newimage = image.scaled(self.lbl_video.width(), self.lbl_video.height(), Qt.KeepAspectRatio,
-                                    Qt.FastTransformation)
-            self.lbl_video.setPixmap(QPixmap.fromImage(newimage))
-            if self.is_recording:
-                try:
-                    qimage = image.convertToFormat(QImage.Format_RGB888)
-                    # 获取当前日期和时间
-                    if self.tempdevData[0] and self.tempdevData[1]:
-                        info = (f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} '
-                                f'ZoneA: {self.tempdevData[0].pv} °C, ZoneB: {self.tempdevData[1].pv} °C')
-                    else:
-                        info = (f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} '
-                                f'ZoneA: Unknown, ZoneB: Unknown')
-                    qimage = self.add_text_to_image(qimage, info, QPoint(30, 30), 20)
-                    cv_image = cv2.cvtColor(np.frombuffer(qimage.bits().asstring(qimage.byteCount()),
-                                                          dtype=np.uint8).reshape((self.imgHeight, self.imgWidth, 3)),
-                                            cv2.COLOR_BGR2RGB)
-                    self.video_writer.write(cv_image)
-                    self.saveToVideo(cv_image)
-                except Exception as e:
-                    print(f'An error occurred when save video: {e}')
-                    self.video_writer.release()
+
+    def updateImage(self):
+        image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
+        newimage = image.scaled(self.lbl_video.width(), self.lbl_video.height(), Qt.KeepAspectRatio,
+                                Qt.FastTransformation)
+        self.lbl_video.setPixmap(QPixmap.fromImage(newimage))
+        if self.is_recording:
+            try:
+                qimage = image.convertToFormat(QImage.Format_RGB888)
+                # 获取当前日期和时间
+                if self.tempdevData[0] and self.tempdevData[1]:
+                    info = (f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} '
+                            f'ZoneA: {self.tempdevData[0].pv} °C, ZoneB: {self.tempdevData[1].pv} °C')
+                else:
+                    info = (f'{datetime.now().strftime("%Y-%m-%d %H:%M:%S")} '
+                            f'ZoneA: Unknown, ZoneB: Unknown')
+                qimage = self.add_text_to_image(qimage, info, QPoint(30, 30), 20)
+                cv_image = cv2.cvtColor(np.frombuffer(qimage.bits().asstring(qimage.byteCount()),
+                                                      dtype=np.uint8).reshape((self.imgHeight, self.imgWidth, 3)),
+                                        cv2.COLOR_BGR2RGB)
+                self.video_writer.write(cv_image)
+                self.saveToVideo(cv_image)
+            except Exception as e:
+                print(f'An error occurred when save video: {e}')
+                self.video_writer.release()
 
     def handleExpoEvent(self):
         time = self.hcam.get_ExpoTime()
@@ -1895,8 +1907,6 @@ class AICVD(QMainWindow, Ui_MainWindow):
         super().closeEvent(event)
 
     def main_loop(self):
-        # 刷新比例尺和显微图像尺寸
-        self.onMagnificationChanged()
         # 实验前先清洗MFC设备{self.counter}秒
         if self.IsLaunched:
             if self.startCounting:

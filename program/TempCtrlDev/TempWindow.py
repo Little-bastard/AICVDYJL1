@@ -1,11 +1,7 @@
 import csv
 import os
 import sys
-from datetime import datetime
-from pathlib import Path
 from queue import Queue
-
-import numpy as np
 import time
 import matplotlib.pyplot as plt
 import serial.tools.list_ports
@@ -219,7 +215,7 @@ class TempProgramTableDialog(QDialog):
 
         # 添加写入程序按钮
         self.writeButton = QPushButton("写入")
-        self.writeButton.clicked.connect(self.mainWin.writeBuffer)
+        self.writeButton.clicked.connect(self.mainWin.writeTempProgram)
         hlayout.addWidget(self.writeButton)
 
         layout.addLayout(hlayout)

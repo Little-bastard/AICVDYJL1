@@ -10,11 +10,14 @@ class MFCComm:
     def __init__(self, portName, baudRate=9600, dataBits=serial.EIGHTBITS, parity=serial.PARITY_NONE,
                  stopBits=serial.STOPBITS_TWO):
         self.MyCom = serial.Serial(port=portName, baudrate=baudRate, bytesize=dataBits, parity=parity,
-                                   stopbits=stopBits, timeout=0.15)
-        self.fss = [self.read_fs(i) for i in range(16)]
-        print(f'fss: {self.fss}')
-        self.factors = [fs / 4095 if fs else None for fs in self.fss]
-        print(f'factors: {self.factors}')
+                                   stopbits=stopBits, timeout=0.15, write_timeout=0.15)
+        try:
+            self.fss = [self.read_fs(i) for i in range(16)]
+            print(f'fss: {self.fss}')
+            self.factors = [fs / 4095 if fs else None for fs in self.fss]
+            print(f'factors: {self.factors}')
+        except Exception as e:
+            print(f'An error occurred when read mfc factors: {e}')
 
     def IsConnect(self):
 
@@ -53,7 +56,9 @@ class MFCComm:
         buffer = bytearray(7)
         self.MyCom.readinto(buffer)
         if self.CheckResult(buffer):
-            print(f'({buffer[3]} * 256 + {buffer[4]})*{self.factors[id]}={round((buffer[3] * 256 + buffer[4]) * self.factors[id], 1)}')
+            if buffer[3] == 255:
+                buffer[3] = 0
+                buffer[4] = 0
             return round((buffer[3] * 256 + buffer[4]) * self.factors[id], 1)
         return None
 
@@ -243,12 +248,16 @@ class MFCComm:
         data[4] = 0
         data[5] = 1
         data[6], data[7] = self.calc_crc16(data[:6])
-        write_len = self.MyCom.write(data)
-        time.sleep(0.05)
-        buffer = bytearray(7)
-        self.MyCom.readinto(buffer)
-        if self.CheckResult(buffer):
-            return round((buffer[3] * 256 + buffer[4]), 1)
+        try:
+            write_len = self.MyCom.write(data)
+            time.sleep(0.05)
+
+            buffer = bytearray(7)
+            self.MyCom.readinto(buffer)
+            if self.CheckResult(buffer):
+                return round((buffer[3] * 256 + buffer[4]), 1)
+        except Exception as e:
+            print(e)
         return None
 
     def calc_crc16(self, data):

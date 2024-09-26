@@ -120,7 +120,9 @@ class MainWidget(QWidget):
     def onTimer(self):
         if self.hcam:
             nFrame, nTime, nTotalFrame = self.hcam.get_FrameRate()
-            self.lbl_frame.setText("{}, fps = {:.1f}".format(nTotalFrame, nFrame * 1000.0 / nTime))
+            if nTime!=0:
+                self.lbl_frame.setText("{}, fps = {:.1f}".format(nTotalFrame, nFrame * 1000.0 / nTime))
+        self.updateImageLabel()
 
     def closeCamera(self):
         if self.hcam:
@@ -220,7 +222,7 @@ class MainWidget(QWidget):
             self.btn_snap.setEnabled(True)
             bAuto = self.hcam.get_AutoExpoEnable()
             self.cbox_auto.setChecked(1 == bAuto)
-            self.timer.start(1000)
+            self.timer.start(100)
 
     def openCamera(self):
         self.hcam = toupcam.Toupcam.Open(self.cur.id)
@@ -301,12 +303,14 @@ class MainWidget(QWidget):
     def handleImageEvent(self):
         try:
             self.hcam.PullImageV3(self.pData, 0, 24, 0, None)
-        except toupcam.HRESULTException:
-            pass
-        else:
-            image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
-            newimage = image.scaled(self.lbl_video.width(), self.lbl_video.height(), Qt.KeepAspectRatio, Qt.FastTransformation)
-            self.lbl_video.setPixmap(QPixmap.fromImage(newimage))
+        except toupcam.HRESULTException as e:
+            print(f'An error occurred when pull image: {e}')
+
+    def updateImageLabel(self):
+        image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
+        newimage = image.scaled(self.lbl_video.width(), self.lbl_video.height(), Qt.KeepAspectRatio, Qt.FastTransformation)
+        self.lbl_video.setPixmap(QPixmap.fromImage(newimage))
+
 
     def handleExpoEvent(self):
         time = self.hcam.get_ExpoTime()

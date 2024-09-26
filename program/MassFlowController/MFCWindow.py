@@ -3,13 +3,9 @@ import os
 import sys
 import time
 from queue import Queue
-import numpy as np
-import serial
-import serial.tools.list_ports
-from PyQt5.QtCore import QTimer, QThread, pyqtSignal, QMutex, Qt, QTime
-from PyQt5.QtWidgets import QMainWindow, QMessageBox, QApplication, QButtonGroup, QLabel, QWidget, QDialog, \
-    QTableWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox, QDialogButtonBox, QTableWidgetItem, QFileDialog, \
-    QHeaderView, QTimeEdit
+from PyQt5.QtCore import QThread, pyqtSignal, QMutex, Qt, QTime
+from PyQt5.QtWidgets import (QMessageBox, QDialog, QTableWidget, QVBoxLayout, QHBoxLayout, QPushButton, QComboBox,
+                             QDialogButtonBox, QTableWidgetItem, QFileDialog, QHeaderView, QTimeEdit)
 from program.MassFlowController.mfcdev import MFCComm
 
 BASE_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
@@ -260,6 +256,4 @@ class MFCWorker(QThread):
 
     def stop_run(self):
         self.stop = True
-        self.mfc_comm.DisConnect()
-        self.mfc_comm = None
 

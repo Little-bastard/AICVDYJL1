@@ -53,8 +53,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>2631</width>
-         <height>1056</height>
+         <width>2627</width>
+         <height>1037</height>
         </rect>
        </property>
        <layout class="QHBoxLayout" name="horizontalLayout_17">
@@ -881,6 +881,12 @@
                                 <width>60</width>
                                 <height>20</height>
                                </size>
+                              </property>
+                              <property name="decimals">
+                               <number>1</number>
+                              </property>
+                              <property name="maximum">
+                               <double>9999.000000000000000</double>
                               </property>
                              </widget>
                             </item>
@@ -4445,7 +4451,7 @@ color: rgb(0, 0, 0);</string>
      <x>0</x>
      <y>0</y>
      <width>2651</width>
-     <height>22</height>
+     <height>26</height>
     </rect>
    </property>
   </widget>
