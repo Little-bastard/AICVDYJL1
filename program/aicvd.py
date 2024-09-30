@@ -22,6 +22,7 @@ from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from modbus_tk import modbus_rtu
 import modbus_tk.defines as cst
 
+from program.BigModelAPI.Flask import FlaskThread
 from program.MicroscopeDev.ImageLabel import DrawableLabel
 
 from program.MassFlowController.MFCWindow import MFCWorker, MFCInputData, MFCProgramTableDialog
@@ -75,8 +76,17 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.lbl_cfg.enterEvent = self.showCfgTooltip
         self.lbl_cfg.leaveEvent = self.hideCfgTooltip
 
+        self.api_thread = FlaskThread()
+        self.api_thread.start_experiment_signal.connect(self.start_experiment2)
+        self.api_thread.stop_experiment_signal.connect(self.stop_experiment2)
+        self.api_thread.set_parameters_signal.connect(self.set_parameters_table)
+        self.api_thread.start()
+
         self.setWindowTitle('AICVD')
-        self.selected_color = "background-color: rgba(85, 170, 255, 50); border: 1px solid rgba(0, 85, 255, 220); padding: 4px;border-radius: 4px"
+        self.selected_color = ("background-color: rgba(85, 170, 255, 50); "
+                               "border: 1px solid rgba(0, 85, 255, 220); "
+                               "padding: 4px;"
+                               "border-radius: 4px")
         self.default_color = ""
 
         self.timer_main = QTimer(self)
@@ -129,6 +139,15 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.stop_experiment()
         else:
             self.start_experiment()
+
+    def start_experiment2(self):
+        print("实验启动了！")
+
+    def stop_experiment2(self):
+        print("实验停止了！")
+
+    def set_parameters_table(self):
+        print("设置参数表")
 
     def stop_experiment(self):
         # 停止录像
@@ -1278,9 +1297,6 @@ class AICVD(QMainWindow, Ui_MainWindow):
         except Exception as e:
             print(f'An error occurred when close camera: {e}')
 
-    def closeEvent(self, event):
-        self.closeCamera()
-
     def onResolutionChanged(self, index):
         try:
             if self.hcam:  #step 1: stop camera
@@ -1516,11 +1532,6 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 # 定义小图要覆盖到大图的位置
                 big_image = self.overlay_image(frame_c, frame_a, (width3-width1-width2, 30))
                 big_image = self.overlay_image(big_image, frame_b, (width3-width2, 30))
-
-                # 保存或显示结果
-                cv2.imwrite('result.jpg', big_image)
-
-                cv2.imwrite('combined_image1.jpg', big_image)
                 self.video_writer2.write(big_image)
         except Exception as e:
             self.video_writer2.release()
@@ -1902,8 +1913,10 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.video_writer.release()
             self.video_writer = None
         if self.hcam:
-            self.hcam.Close()
-            self.hcam = None
+            self.closeCamera()
+        if self.api_thread:
+            self.api_thread.stop()
+            self.api_thread.wait()
         super().closeEvent(event)
 
     def main_loop(self):
