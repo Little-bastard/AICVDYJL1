@@ -1,51 +1,64 @@
 import sys
-from PyQt5.QtCore import QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QMainWindow
-from flask import Flask, request, jsonify
+import csv
+from PyQt5.QtWidgets import QApplication, QDialog, QTableWidget, QTableWidgetItem, QVBoxLayout
+from PyQt5.QtGui import QColor, QBrush
+from PyQt5.QtCore import Qt
 
-app = Flask(__name__)
+class TaskManagerDialog(QDialog):
+    def __init__(self, csv_file_path, parent=None):
+        super(TaskManagerDialog, self).__init__(parent)
+        self.csv_file_path = csv_file_path
+        self.initUI()
 
-class RestApiThread(QThread):
-    # 创建一个信号，用于通知主线程
-    trigger_experiment = pyqtSignal(str)
+    def initUI(self):
+        self.setWindowTitle('任务管理表格')
+        self.tableWidget = QTableWidget()
+        self.tableWidget.setRowCount(0)
+        self.tableWidget.setColumnCount(3)
+        self.tableWidget.setHorizontalHeaderLabels(['任务ID', '任务描述', '进度', '完成状态'])
+        self.loadData()
+        layout = QVBoxLayout()
+        layout.addWidget(self.tableWidget)
+        self.setLayout(layout)
+        self.resize(600, 400)
 
-    def run(self):
-        @app.route('/start_experiment', methods=['POST'])
-        def start_experiment():
-            data = request.json
-            print("Received data:", data)
-            # 触发主线程的槽函数
-            self.trigger_experiment.emit(data['command'])
-            return jsonify({"status": "success"}), 200
+    def loadData(self):
+        try:
+            with open(self.csv_file_path, 'r') as csvfile:
+                reader = csv.reader(csvfile)
+                for row_index, row in enumerate(reader):
+                    if row_index == 0:
+                        continue  # 跳过标题行
+                    self.tableWidget.insertRow(row_index)
+                    for column_index, data in enumerate(row):
+                        item = QTableWidgetItem(data)
+                        self.tableWidget.setItem(row_index-1, column_index, item)
+                    self.setRowColor(row_index, self.getColorByStatus(row[2]))
+        except FileNotFoundError:
+            print(f"文件 {self.csv_file_path} 未找到。")
+        except Exception as e:
+            print(f"读取文件时发生错误：{e}")
 
-        # 在线程中启动 Flask 服务
-        app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False)
+    def getColorByStatus(self, status):
+        if status == "进行中":
+            return QColor("yellow")
+        elif status == "未开始":
+            return QColor("gray")
+        elif status == "已完成":
+            return QColor("green")
+        else:
+            return QColor("white")  # 默认颜色为白色
 
-    def stop(self):
-        # Flask 没有提供直接停止服务的方法，这里可以调用 Werkzeug 的 shutdown 方法
-        func = request.environ.get('werkzeug.server.shutdown')
-        if func:
-            func()
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.api_thread = RestApiThread()
-        self.api_thread.trigger_experiment.connect(self.handle_experiment)
-        self.api_thread.start()
-
-    def handle_experiment(self, command):
-        print(f"Triggering experiment with command: {command}")
-        # 这里可以添加启动实验的代码
-
-    def closeEvent(self, event):
-        # 重写 closeEvent 以确保在关闭窗口时停止 Flask 服务
-        self.api_thread.stop()
-        self.api_thread.wait()
-        super().closeEvent(event)
+    def setRowColor(self, row, color):
+        # 设置整行的颜色
+        for column in range(self.tableWidget.columnCount()):
+            item = self.tableWidget.item(row, column) if self.tableWidget.item(row, column) else QTableWidgetItem()
+            item.setBackground(QBrush(color))
+            self.tableWidget.setItem(row-1, column, item)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
+    csv_file_path = '../TaskManagement/实验任务进度管理表.csv'  # 替换为你的CSV文件路径
+    dialog = TaskManagerDialog(csv_file_path)
+    dialog.show()
     sys.exit(app.exec_())

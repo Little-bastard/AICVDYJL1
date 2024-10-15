@@ -3,19 +3,10 @@ import os
 import sys
 from queue import Queue
 import time
-import matplotlib.pyplot as plt
-import serial.tools.list_ports
-from PyQt5.QtCore import QUrl, Qt, QThread, pyqtSignal, QObject, QTimer, QElapsedTimer
-from PyQt5.QtGui import QStandardItemModel, QStandardItem
-from PyQt5.QtWebEngineWidgets import QWebEngineView
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox, QDialog, QVBoxLayout, QDialogButtonBox, \
-    QTableWidget, QPushButton, QTableWidgetItem, QFileDialog, QComboBox, QLabel, QAction, QMenu, QTreeWidgetItem, \
-    QWidget, QHBoxLayout
-from matplotlib.ticker import FormatStrFormatter
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
 
-from program.Ui_MainWindow import Ui_MainWindow
+from PyQt5.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QDialogButtonBox, \
+    QTableWidget, QPushButton, QTableWidgetItem, QFileDialog, QComboBox, QHBoxLayout
 from program.TempCtrlDev.tempdev import AIBUSParam
 
 BASE_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))

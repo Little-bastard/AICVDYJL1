@@ -1,9 +1,11 @@
 from flask import Flask, jsonify, request
 from PyQt5.QtWidgets import QApplication, QMainWindow
-from PyQt5.QtCore import pyqtSignal, QObject, QThread
+from PyQt5.QtCore import pyqtSignal, QThread
 import sys
 
 app = Flask(__name__)
+
+
 class FlaskThread(QThread):
     start_experiment_signal = pyqtSignal()
     stop_experiment_signal = pyqtSignal()
@@ -31,10 +33,13 @@ class FlaskThread(QThread):
 
     def stop(self):
         # Flask 没有提供直接停止服务的方法，这里可以调用 Werkzeug 的 shutdown 方法
-        func = request.environ.get('werkzeug.server.shutdown')
-        if func:
-            func()
-
+        try:
+            func = request.environ.get('werkzeug.server.shutdown')
+            if func:
+                func()
+        except Exception as e:
+            print(f'error: {e}')
+        print(f'stop web server')
 
 
 if __name__ == '__main__':

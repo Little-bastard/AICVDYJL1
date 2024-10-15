@@ -25,7 +25,7 @@ Base URLs:
 
 # Authentication
 
-# BigModelAPI
+# LargeModelAPI
 
 ## POST 启动实验
 

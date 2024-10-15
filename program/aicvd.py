@@ -21,12 +21,14 @@ import qdarktheme
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from modbus_tk import modbus_rtu
 import modbus_tk.defines as cst
+from serial.tools import list_ports
 
-from program.BigModelAPI.Flask import FlaskThread
+from program.LargeModelAPI.Flask import FlaskThread
 from program.MicroscopeDev.ImageLabel import DrawableLabel
 
 from program.MassFlowController.MFCWindow import MFCWorker, MFCInputData, MFCProgramTableDialog
 from program.MicroscopeDev import toupcam
+from program.TaskManagement.TaskManager import TaskManagerTableDialog
 from program.TempCtrlDev.TempWindow import TempProgramTableDialog, TempWorker, TempInputData
 from program.Ui_MainWindow import Ui_MainWindow
 from program.robotControl.RobotWindow import WebEngineView
@@ -75,6 +77,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.BT_launch_experiment.clicked.connect(self.onLaunchExperiment)
         self.lbl_cfg.enterEvent = self.showCfgTooltip
         self.lbl_cfg.leaveEvent = self.hideCfgTooltip
+
+        self.BT_task_manage.clicked.connect(self.onManageTasks)
 
         self.api_thread = FlaskThread()
         self.api_thread.start_experiment_signal.connect(self.start_experiment2)
@@ -139,6 +143,14 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.stop_experiment()
         else:
             self.start_experiment()
+
+    def onManageTasks(self):
+        try:
+            self.dialog = TaskManagerTableDialog()
+            if self.dialog.exec_() == QDialog.Accepted:
+                print("Dialog was accepted.")
+        except Exception as e:
+            print(e)
 
     def start_experiment2(self):
         print("实验启动了！")
@@ -308,7 +320,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.mfc_comm = None
         self.mfc_time_interval = 100  # ms
         self.mfc_fps = 1000 / self.mfc_time_interval
-        ports_list = list(serial.tools.list_ports.comports())
+        ports_list = list(list_ports.comports())
         ports_name = [port.name for port in ports_list]
         self.CBB_mfc_port.clear()
         self.CBB_mfc_port.addItems(ports_name)
@@ -672,7 +684,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.timer_temperature_window.timeout.connect(self.updateTempData)  # 连接定时器信号到槽函数
 
         # 设置可用的comm端口号
-        ports_list = list(serial.tools.list_ports.comports())
+        ports_list = list(list_ports.comports())
         ports_name = [port.name for port in ports_list]
         self.CBB_temp_port.clear()
         self.CBB_temp_port.addItems(ports_name)
@@ -1270,7 +1282,6 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.updateImage()
             # 刷新比例尺和显微图像尺寸
             self.onMagnificationChanged()
-
 
     def closeCamera(self):
         try:
@@ -1916,7 +1927,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.closeCamera()
         if self.api_thread:
             self.api_thread.stop()
-            self.api_thread.wait()
+            self.api_thread = None
         super().closeEvent(event)
 
     def main_loop(self):
@@ -1964,8 +1975,11 @@ class AICVD(QMainWindow, Ui_MainWindow):
             except Exception as e:
                 print(f'{e}')
             if plc_signal == (1, 0, 0, 0, 1, 1, 1, 1, 0, 0) and self.restartFlag is False:
-                print(f'get PLC signal:{plc_signal}')
+                print(f'收到PLC信号: 241 ！开启新一轮实验！')
                 self.restartFlag = True
+                # 在这里解决显微镜图像卡住的bug, 切换分辨率，再切换回来。
+                self.cmb_res.setCurrentIndex(2)
+                self.cmb_res.setCurrentIndex(self.res)
             if plc_signal == (0, 0, 0, 0, 1, 1, 1, 1, 0, 0):
                 self.restartFlag = False
         if self.IsExpEnd and self.restartFlag:
