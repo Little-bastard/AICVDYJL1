@@ -19,9 +19,8 @@ class TaskManagerTableDialog(QDialog):
 
     def initUI(self):
         self.setWindowTitle("实验任务进度管理")
-        self.resize(800, 400)
+        self.resize(1080, 720)
         layout = QVBoxLayout()
-
         self.tableWidget = QTableWidget(1, 7)
         layout.addWidget(self.tableWidget)
         self.setLayout(layout)
@@ -30,7 +29,7 @@ class TaskManagerTableDialog(QDialog):
     def loadTable(self):
         filepath = os.path.join(task_management_path, f'实验任务进度管理表.csv')
         try:
-            with open(filepath, mode='r', newline='') as file:
+            with open(filepath, mode='r', newline='', encoding='utf-8') as file:
                 reader = csv.reader(file)
                 # 清空现有表格数据
                 self.tableWidget.clearContents()
@@ -48,8 +47,8 @@ class TaskManagerTableDialog(QDialog):
                         if column_idx == 0:  # 第一列设置为不可编辑
                             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
                         self.tableWidget.setItem(row_idx - 1, column_idx, item)
-                    # 根据完成状态设置整行颜色
-                    status = row_data[self.getColumnInfoByName('完成状态')]
+                    # 根据任务状态设置整行颜色
+                    status = row_data[self.getColumnInfoByName('任务状态')]
                     if status == "进行中":
                         self.setRowColor(row_idx-1, QColor("darkgoldenrod"))
                     elif status == "未开始":

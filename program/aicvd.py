@@ -1,4 +1,5 @@
 import copy
+import csv
 import json
 import os
 import sys
@@ -38,6 +39,7 @@ config_directory_path = os.path.join(BASE_DIR, 'config')
 video_directory_path = os.path.join(BASE_DIR, 'video')
 result_directory_path = os.path.join(BASE_DIR, 'result')
 temp_config_path = os.path.join(BASE_DIR, 'config', "temp_config")
+task_management_path = os.path.join(BASE_DIR, 'TaskManagement')
 
 
 class AICVD(QMainWindow, Ui_MainWindow):
@@ -60,7 +62,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.order = None
         self.cfg_file = None
         self.line_len = 0
-        self.counter = 180
+        self.default_clean_time = 180 # 默认清洗3分钟
+        self.counter = self.default_clean_time
         self.startCounting = False
         self.restartFlag = False
         self.showSettings = False
@@ -81,8 +84,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.BT_task_manage.clicked.connect(self.onManageTasks)
 
         self.api_thread = FlaskThread()
-        self.api_thread.start_experiment_signal.connect(self.start_experiment2)
-        self.api_thread.stop_experiment_signal.connect(self.stop_experiment2)
+        self.api_thread.start_experiment_signal.connect(self.start_experiment)
+        self.api_thread.stop_experiment_signal.connect(self.stop_experiment)
         self.api_thread.set_parameters_signal.connect(self.set_parameters_table)
         self.api_thread.start()
 
@@ -131,12 +134,28 @@ class AICVD(QMainWindow, Ui_MainWindow):
             print(f'保存实验状态到文件：{current_profile}')
             # 创建一个只有表头的空Excel表用于保存每轮实验的结果
             df = pd.read_excel(self.cfg_file, sheet_name='Sheet1')
+            self.total_order = df['Order'].max()
             columns = df.columns.tolist() + ["Video_name", "Date"]
             df_new = pd.DataFrame(columns=columns)
             current_time = datetime.now().strftime("%Y%m%d%H%M%S")
             filename = f'result_{current_time}.xlsx'
             self.result_filepath = os.path.join(result_directory_path, filename)
             df_new.to_excel(self.result_filepath, index=False)
+            #初始化任务管理表
+            headers = ["实验id", "任务id", "进度", "任务状态", "开始时间", "结束时间", "任务结果"]
+            filepath = os.path.join(task_management_path, "实验任务进度管理表.csv")
+            exp_file = os.path.basename(self.cfg_file)
+            exp_id, file_extension = os.path.splitext(exp_file)
+            try:
+                with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(headers)  # 写入表头
+                    # 写入数据行
+                    for i in range(1, self.total_order + 1):
+                        row = [f'{exp_id}', str(i), "0%", "未开始", "", "", ""]
+                        writer.writerow(row)
+            except Exception as e:
+                print(f'An error occurred when init 实验任务进度管理表.csv: {e}')
 
     def onLaunchExperiment(self):
         if self.IsLaunched:
@@ -151,6 +170,13 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 print("Dialog was accepted.")
         except Exception as e:
             print(e)
+
+    def updateTaskTable(self, fieldName, value):
+        # 更新任务管理表
+        csv_file_path = os.path.join(task_management_path, '实验任务进度管理表.csv')
+        df = pd.read_csv(csv_file_path)
+        df.loc[df['任务id'] == self.order, fieldName] = value
+        df.to_csv(csv_file_path, index=False)
 
     def start_experiment2(self):
         print("实验启动了！")
@@ -175,6 +201,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.IsLaunched = False
         self.BT_launch_experiment.setText("启动实验")
         print(f'停止实验')
+        # 更新任务进度管理表
+        self.updateTaskTable("任务状态", "停止中")
 
     def start_experiment(self):
         try:
@@ -223,8 +251,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
                         self.worker_temp.write_data(
                             TempInputData(iParamNo=iparam, Value=self.temperature_program_b[i], iDevAdd=2))
                     self.lbl_buffer_b.setText(f'{self.temperature_program_name_b}')
+                    self.program_a = (self.temperature_program_a[0::2], self.temperature_program_a[1::2])
+                    self.program_b = (self.temperature_program_b[0::2], self.temperature_program_b[1::2])
                     self.worker_temp.read_program_settings()
-                    self.set_temp_xlim()
                 # 将流量写入MFC
                 # 先将各纯气体流量值转化为各设备通道输入值
                 self.air_transform(Ar=self.mfc_program_Ar, H2=self.mfc_program_H2)
@@ -237,6 +266,10 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 # 清洗MFC
                 self.cleanMFC()
                 print(f'启动实验')
+                self.updateTaskTable("进度", "0%")
+                self.updateTaskTable("任务状态", "进行中")
+                # result_path = r'D:\wenkong\AICVD\program\video\材料视频.mp4'
+                # self.updateTaskTable("任务结果", f"{result_path}")
         except Exception as e:
             print(e)
 
@@ -248,10 +281,12 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.onLaunchMFCProgram()
         # 开始录像
         self.start_recording()
-        # 记录起始时间
-        self.exp_start_time = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
         # 设置标志位
         self.IsResultSaved = False
+        # 记录起始时间
+        self.exp_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 更新任务进度管理表
+        self.updateTaskTable("开始时间", f'{self.exp_start_time}')
 
     def air_transform(self, **kwargs):
         print(f'transform air')
@@ -289,6 +324,22 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def onSaveResult(self):
         try:
+            # 保存结果
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f'params: {self.params}')
+            self.params["Video_name"] = f'{self.out_video_path}'
+            self.params["Date"] = f'{self.exp_start_time}, {current_time}'
+            old_df = pd.read_excel(self.result_filepath, sheet_name=0)
+            updated_df = pd.concat([old_df, self.params], ignore_index=True)
+            updated_df.to_excel(self.result_filepath, index=False)
+            print(f'结果已保存')
+            # 更新任务进度管理表
+            self.updateTaskTable("结束时间", f'{current_time}')
+            self.updateTaskTable("任务状态", "已完成")
+            self.updateTaskTable("任务结果", f'{self.out_video_path}')
+        except Exception as e:
+            print(f'An error occurred when save result: {e}')
+        try:
             # 更新轮次
             self.order = self.order + 1
             current_profile = {
@@ -297,18 +348,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
             }
             with open(f'{config_directory_path}/profile.json', 'w', encoding='utf-8') as profile:
                 json.dump(current_profile, profile, ensure_ascii=False, indent=4)
-            print(f'snap configuration: {current_profile}')
-            # 保存结果
-            current_time = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-            print(f'params: {self.params}')
-            self.params["Video_name"] = f'{self.out_video_path}'
-            self.params["Date"] = f'{self.exp_start_time}, {current_time}'
-            old_df = pd.read_excel(self.result_filepath, sheet_name=0)
-            updated_df = pd.concat([old_df, self.params], ignore_index=True)
-            updated_df.to_excel(self.result_filepath, index=False)
-            print(f'结果已保存')
+            print(f'保存实验追踪信息: {current_profile}')
         except Exception as e:
-            print(f'An error occurred when save result: {e}')
+            print(f'An error occurred when snap experiment tracking configuration: {e}')
 
     # MFC RELATED
     def init_mfc_ui(self):
@@ -819,7 +861,6 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 self.dialog.saveTable()
                 QMessageBox.information(None, "文件写入", "文件写入成功！", QMessageBox.Ok)
                 self.worker_temp.read_program_settings()
-                self.set_temp_xlim()
         except Exception as e:
             print(f"An error occurred while writing to the Buffer: {e}")
             QMessageBox.critical(self, "Error", f"An error occurred while writing to the Buffer: {e}")
@@ -844,7 +885,6 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.worker_temp.program_signal.connect(self.handle_result_pgm)
             self.worker_temp.start()
             self.worker_temp.read_program_settings()
-            self.set_temp_xlim()
             self.BT_run_a.setEnabled(True)
             self.BT_hold_a.setEnabled(True)
             self.BT_stop_a.setEnabled(True)
@@ -898,6 +938,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
             print(f'An error occurred when close temp: {e}')
 
     def set_temp_xlim(self):
+        self.total_set_time_a = sum(self.program_a[1][:-1])
+        self.total_set_time_b = sum(self.program_b[1][:-1])
         if self.total_set_time_a and self.total_set_time_b:
             self.temp_time_range = max(self.total_set_time_a, self.total_set_time_b) * 60
             ctime = time.time()
@@ -979,6 +1021,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.program_a, self.program_b = copy.deepcopy(result)
         print(f'program a: {self.program_a}')
         print(f'program b: {self.program_b}')
+        # 每次读取新温度程序后都更新一次温度曲线横轴范围
+        self.set_temp_xlim()
 
     def handle_result_temp(self, result):
         self.tempdevData = copy.deepcopy(result)
@@ -1100,6 +1144,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 # 更新图形
                 self.line_pv_a.set_data(x_data_pv_a, y_data_pv_a)
                 self.line_sv_a.set_data(x_data_sv_a, y_data_sv_a)
+                self.max_temperature_a = max(self.max_temperature_a, max(self.tempdevData[0].pv,
+                                                                         self.tempdevData[0].sv) * 1.4)
                 self.ax_a.set_ylim(-5, self.max_temperature_a)
                 self.ax_a.relim()  # 重新计算坐标轴的界限
                 self.ax_a.autoscale_view(True, True, True)  # 自动缩放
@@ -1126,6 +1172,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 # 更新图形
                 self.line_pv_b.set_data(x_data_pv_b, y_data_pv_b)
                 self.line_sv_b.set_data(x_data_sv_b, y_data_sv_b)
+                self.max_temperature_b = max(self.max_temperature_b, max(self.tempdevData[1].pv,
+                                                                         self.tempdevData[1].sv) * 1.4)
                 self.ax_b.set_ylim(-5, self.max_temperature_b)
                 self.ax_b.relim()  # 重新计算坐标轴的界限
                 self.ax_b.autoscale_view(True, True, True)  # 自动缩放
@@ -1142,17 +1190,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
                             progress_time_a = sum(self.program_a[1][:self.tempdevData[0].step - 1]) + self.tempdevData[
                                 0].tim
                         progress_percent_a = int(progress_time_a / self.total_set_time_a * 100)
-
                         self.psbar_a.setValue(progress_percent_a)
-                        self.max_temperature_a = max(self.max_temperature_a, max(self.tempdevData[0].pv,
-                                                     self.tempdevData[0].sv) * 1.4)
-                    else:
-                        self.max_temperature_a = max(self.max_temperature_a, max(self.tempdevData[0].pv,
-                                                     self.tempdevData[0].sv) * 1.4)
-                        self.psbar_a.setValue(0)
                 if self.tempdevData[1]:
                     if self.program_b[1]:
-
                         if self.is_final_step_b and self.tempdevData[1].step == 1:
                             progress_time_b = self.total_set_time_b
                         else:
@@ -1160,12 +1200,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
                                 1].tim
                         progress_percent_b = int(progress_time_b / self.total_set_time_b * 100)
                         self.psbar_b.setValue(progress_percent_b)
-                        self.max_temperature_b = max(self.max_temperature_b, max(self.tempdevData[1].pv,
-                                                     self.tempdevData[1].sv) * 1.4)
-                    else:
-                        self.max_temperature_b = max(self.max_temperature_b, max(self.tempdevData[1].pv,
-                                                     self.tempdevData[1].sv) * 1.4)
-                        self.psbar_b.setValue(0)
+                        # 更新任务管理表中当前任务的进度（以温区B的温度曲线进度为准）
+                        self.updateTaskTable("进度", f'{progress_percent_b}%')
             except Exception as e:
                 print(e)
 
@@ -1855,8 +1891,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.BT_settings.setText("<")
 
     def cleanMFC(self):
-        # 清洗180秒
-        self.counter = 180
+        # 清洗self.default_clean_time秒
+        self.counter = self.default_clean_time
         self.onSwitchClean()
         self.startCounting = True
 
@@ -1938,7 +1974,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 print(f'清洗倒计时：{self.counter}')
             if self.counter <= 0:
                 self.startCounting = False
-                self.counter = 180
+                self.counter = self.default_clean_time
                 # 清洗完后先关闭所有流量计阀门
                 if self.worker_mfc:
                     self.worker_mfc.write_data('switch',
@@ -1964,6 +2000,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
         if self.IsExpEnd and not self.IsResultSaved:
             # 保存结果
+            self.onBtnSnap2()
             self.onSaveResult()
             self.IsResultSaved = True
             # 停止本轮实验
