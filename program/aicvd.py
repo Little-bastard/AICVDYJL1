@@ -37,6 +37,7 @@ from program.robotControl.RobotWindow import WebEngineView
 BASE_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
 config_directory_path = os.path.join(BASE_DIR, 'config')
 video_directory_path = os.path.join(BASE_DIR, 'video')
+image_directory_path = os.path.join(BASE_DIR, 'image')
 result_directory_path = os.path.join(BASE_DIR, 'result')
 temp_config_path = os.path.join(BASE_DIR, 'config', "temp_config")
 task_management_path = os.path.join(BASE_DIR, 'TaskManagement')
@@ -47,6 +48,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def __init__(self, parent=None):
         super(AICVD, self).__init__(parent)
+        self.exp_id = None
+        self.out_image_path = None
         self.timer_temperature_window = None
         self.IsLaunched = None
         self.IsThresholdSet = None
@@ -122,6 +125,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def onApplyConfiguration(self):
         if self.cfg_file:
+            self.stop_experiment()
             self.BT_apply_cfg.setChecked(True)
             self.BT_apply_cfg.setStyleSheet(self.selected_color)
             self.order = 1
@@ -132,27 +136,27 @@ class AICVD(QMainWindow, Ui_MainWindow):
             with open(f'{config_directory_path}/profile.json', 'w', encoding='utf-8') as profile:
                 json.dump(current_profile, profile, ensure_ascii=False, indent=4)
             print(f'保存实验状态到文件：{current_profile}')
-            # 创建一个只有表头的空Excel表用于保存每轮实验的结果
+            # 创建一个只有表头的空Excel表, 用于保存每轮实验的结果
             df = pd.read_excel(self.cfg_file, sheet_name='Sheet1')
             self.total_order = df['Order'].max()
-            columns = df.columns.tolist() + ["Video_name", "Date"]
+            columns = df.columns.tolist() + ["Video", "Image", "Date"]
             df_new = pd.DataFrame(columns=columns)
             current_time = datetime.now().strftime("%Y%m%d%H%M%S")
             filename = f'result_{current_time}.xlsx'
             self.result_filepath = os.path.join(result_directory_path, filename)
             df_new.to_excel(self.result_filepath, index=False)
             #初始化任务管理表
-            headers = ["实验id", "任务id", "进度", "任务状态", "开始时间", "结束时间", "任务结果"]
+            headers = ["实验id", "任务id", "进度", "任务状态", "开始时间", "结束时间", "视频结果", "图像结果"]
             filepath = os.path.join(task_management_path, "实验任务进度管理表.csv")
             exp_file = os.path.basename(self.cfg_file)
-            exp_id, file_extension = os.path.splitext(exp_file)
+            self.exp_id, file_extension = os.path.splitext(exp_file)
             try:
                 with open(filepath, 'w', newline='', encoding='utf-8') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerow(headers)  # 写入表头
                     # 写入数据行
                     for i in range(1, self.total_order + 1):
-                        row = [f'{exp_id}', str(i), "0%", "未开始", "", "", ""]
+                        row = [f'{self.exp_id}', f'{i}', "0%", "未开始", "", "", "", ""]
                         writer.writerow(row)
             except Exception as e:
                 print(f'An error occurred when init 实验任务进度管理表.csv: {e}')
@@ -268,8 +272,11 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 print(f'启动实验')
                 self.updateTaskTable("进度", "0%")
                 self.updateTaskTable("任务状态", "进行中")
-                # result_path = r'D:\wenkong\AICVD\program\video\材料视频.mp4'
-                # self.updateTaskTable("任务结果", f"{result_path}")
+                # video_path = r'D:\pythonproject\AICVD\program\video\材料视频.mp4'
+                # self.updateTaskTable("视频结果", f"{video_path}")
+                # image_path = r'D:\pythonproject\AICVD\program\image\result.jpg'
+                # self.updateTaskTable("图像结果", f'{image_path}')
+
         except Exception as e:
             print(e)
 
@@ -327,7 +334,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
             # 保存结果
             current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             print(f'params: {self.params}')
-            self.params["Video_name"] = f'{self.out_video_path}'
+            self.params["Video"] = f'{self.out_video_path}'
+            self.params["Image"] = f'{self.out_image_path}'
             self.params["Date"] = f'{self.exp_start_time}, {current_time}'
             old_df = pd.read_excel(self.result_filepath, sheet_name=0)
             updated_df = pd.concat([old_df, self.params], ignore_index=True)
@@ -336,7 +344,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
             # 更新任务进度管理表
             self.updateTaskTable("结束时间", f'{current_time}')
             self.updateTaskTable("任务状态", "已完成")
-            self.updateTaskTable("任务结果", f'{self.out_video_path}')
+            self.updateTaskTable("视频结果", f'{self.out_video_path}')
+            self.updateTaskTable("图像结果", f'{self.out_image_path}')
         except Exception as e:
             print(f'An error occurred when save result: {e}')
         try:
@@ -1322,6 +1331,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def closeCamera(self):
         try:
             if self.hcam:
+                self.stop_recording()
                 self.hcam.Close()
                 self.hcam = None
                 self.pData = None
@@ -1360,7 +1370,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
             print(f'An error occurred when change resolution: {e}')
 
     def onMagnificationChanged(self):
-        '''刷新比例尺和显微图像尺寸'''
+        """刷新比例尺和显微图像尺寸"""
         try:
             mag = int(self.cmb_magnification.currentText())
             val = int(self.slider_mag.value())
@@ -1497,8 +1507,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     if self.pData is not None:
                         image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
                         self.count += 1
-                        dtime = datetime.fromtimestamp(time.time()).strftime('%Y%m%d%H%M%S')
-                        out_image_path = os.path.join(video_directory_path, f'{dtime}_{self.count}.jpg')
+                        dtime = datetime.fromtimestamp(time.time()).strftime('%H%M%S')
+                        out_image_path = os.path.join(image_directory_path, f'{self.exp_id}_{self.order}_{dtime}_{self.count}.jpg')
                         image.save(f'{out_image_path}')
                         print(f'save image to {out_image_path}')
                         mag = int(self.cmb_magnification.currentText())
@@ -1511,7 +1521,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                         qimage = self.draw_line_with_arrows(qimage, QPoint(image.width() - int(self.line_len) - 50,
                                                                            image.height() - 10),
                                                             QPoint(image.width() - 50, image.height() - 10))
-                        out_image_path2 = os.path.join(video_directory_path, f'{dtime}_{self.count}_.jpg')
+                        out_image_path2 = os.path.join(image_directory_path, f'{self.exp_id}_{self.order}_{dtime}_{self.count}_scale.jpg')
                         qimage.save(f'{out_image_path2}')
                         print(f'save image to {out_image_path2}')
                 else:
@@ -1554,10 +1564,10 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     painter.drawText(image.rect(), Qt.AlignTop | Qt.AlignLeft, info)
                     # 完成绘制
                     painter.end()
-                    # image.save("pyqt{}.jpg".format(self.count))
-                    dtime = datetime.fromtimestamp(time.time()).strftime('%Y%m%d%H%M%S')
-                    out_image_path = os.path.join(video_directory_path, f'{dtime}_{self.count}.jpg')
+                    dtime = datetime.fromtimestamp(time.time()).strftime('%H%M%S')
+                    out_image_path = os.path.join(image_directory_path, f'{self.exp_id}_{self.order}_{dtime}_{self.count}_mix.jpg')
                     image.save(out_image_path)
+                    return out_image_path
         except Exception as e:
             print(f'An error occurred when snap: {e}')
 
@@ -1634,9 +1644,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 self.btn_save.setChecked(True)
                 self.btn_save.setFlat(True)
                 self.btn_save.setStyleSheet(self.selected_color)
-                dtime = datetime.fromtimestamp(time.time()).strftime('%Y%m%d%H%M%S')
-                self.out_video_path = os.path.join(video_directory_path, f'{dtime}.mp4')
-                self.out_video_path2 = os.path.join(video_directory_path, f'{dtime}_mix.mp4')
+                dtime = datetime.fromtimestamp(time.time()).strftime('%H%M%S')
+                self.out_video_path = os.path.join(video_directory_path, f'{self.exp_id}_{self.order}_{dtime}.mp4')
+                self.out_video_path2 = os.path.join(video_directory_path, f'{self.exp_id}_{self.order}_{dtime}_mix.mp4')
                 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
                 nFrame, nTime, nTotalFrame = self.hcam.get_FrameRate()
                 frame_rate = nFrame * 1000.0 / nTime
@@ -1656,11 +1666,12 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     @staticmethod
     def eventCallBack(nEvent, self):
-        '''callbacks come from toupcam.dll/so internal threads, so we use qt signal to post this event to the UI thread'''
+        """callbacks come from toupcam.dll/so internal threads, so we use qt signal to post this event to the UI
+        thread"""
         self.evtCallback.emit(nEvent)
 
     def onevtCallback(self, nEvent):
-        '''this run in the UI thread'''
+        """this run in the UI thread"""
         if self.hcam:
             if toupcam.TOUPCAM_EVENT_IMAGE == nEvent:
                 self.handleImageEvent()
@@ -1743,8 +1754,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 else:
                     image = QImage(buf, info.width, info.height, QImage.Format_RGB888)
                     self.count += 1
-                    dtime = datetime.fromtimestamp(time.time()).strftime('%Y%m%d%H%M%S')
-                    out_image_path = os.path.join(video_directory_path, f'{dtime}_{self.count}.jpg')
+                    dtime = datetime.fromtimestamp(time.time()).strftime('%H%M%S')
+                    out_image_path = os.path.join(image_directory_path, f'{self.exp_id}_{self.order}_{dtime}_{self.count}.jpg')
                     image.save(f'{out_image_path}')
                     print(f'save image to {out_image_path}')
                     mag = int(self.cmb_magnification.currentText())
@@ -1757,7 +1768,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     qimage = self.draw_line_with_arrows(qimage, QPoint(image.width() - int(self.line_len) - 50,
                                                                        image.height() - 10),
                                                         QPoint(image.width() - 50, image.height() - 10))
-                    out_image_path2 = os.path.join(video_directory_path, f'{dtime}_{self.count}_.jpg')
+                    out_image_path2 = os.path.join(image_directory_path, f'{self.exp_id}_{self.order}_{dtime}_{self.count}_mix.jpg')
                     qimage.save(f'{out_image_path2}')
                     print(f'save image to {out_image_path2}')
 
@@ -2000,7 +2011,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
         if self.IsExpEnd and not self.IsResultSaved:
             # 保存结果
-            self.onBtnSnap2()
+            self.out_image_path = self.onBtnSnap2()
+
             self.onSaveResult()
             self.IsResultSaved = True
             # 停止本轮实验

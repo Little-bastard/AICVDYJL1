@@ -6,7 +6,7 @@ import openpyxl
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QBrush
 from PyQt5.QtWidgets import QDialog, QHeaderView, QTableWidgetItem, QVBoxLayout, QTableWidget, QMessageBox, \
-    QAbstractItemView
+    QAbstractItemView, QHBoxLayout
 
 BASE_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
 task_management_path = os.path.join(BASE_DIR, 'TaskManagement')
@@ -18,12 +18,18 @@ class TaskManagerTableDialog(QDialog):
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle("实验任务进度管理")
+        self.tableWidget = QTableWidget(1, 8)
         self.resize(1080, 720)
-        layout = QVBoxLayout()
-        self.tableWidget = QTableWidget(1, 7)
-        layout.addWidget(self.tableWidget)
-        self.setLayout(layout)
+        # 调整列宽以适应内容
+        self.tableWidget.resizeColumnsToContents()
+        self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        # 创建布局
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.tableWidget)  # 将表格添加到布局中
+        layout.setStretchFactor(self.tableWidget, 1)  # 设置表格的拉伸因子
+        self.setWindowTitle("实验任务进度管理")
+
+        self.tableWidget.itemChanged.connect(self.onItemChanged)
         self.loadTable()
 
     def loadTable(self):
@@ -43,6 +49,7 @@ class TaskManagerTableDialog(QDialog):
                     self.tableWidget.insertRow(row_idx - 1)  # 行索引从0开始
                     for column_idx, value in enumerate(row_data):
                         item = QTableWidgetItem(value)
+                        item.setToolTip(value)  # 设置ToolTip
                         item.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
                         if column_idx == 0:  # 第一列设置为不可编辑
                             item.setFlags(item.flags() & ~Qt.ItemIsEditable)
@@ -60,10 +67,18 @@ class TaskManagerTableDialog(QDialog):
             QMessageBox.critical(self, "Error", f"An error occurred while reading the file: {e}")
         # 隐藏行号
         self.tableWidget.verticalHeader().setVisible(False)
-        # 调整列宽以适应内容
-        self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        # # 调整列宽以适应内容
+        # self.tableWidget.resizeColumnsToContents()
+        # # 调整列宽以适应内容
+        # self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        # self.tableWidget.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         # 设置表格的行可以被选中，但不能编辑
         self.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+    def onItemChanged(self, item):
+        # 调整列宽以适应内容
+        self.tableWidget.resizeColumnsToContents()
 
     def getColumnInfoByName(self, header_name):
         # 获取列索引

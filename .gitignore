@@ -16,5 +16,6 @@ dist/
 .gitignore
 
 video/
+image/
 result/
 .idea/

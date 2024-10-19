@@ -86,38 +86,175 @@ POST /set_parameters
 > Body 请求参数
 
 ```json
-{
-  "Parameters": {
-    "Order": "",
-    "A": "",
-    "B": "",
-    "mass_A": "",
-    "mass_B": "",
-    "Substrate": "",
-    "temperature_A": {
-      "temperature": [],
-      "time": []
-    },
-    "temperature_B": {
-      "temperature": [],
-      "time": []
-    },
-    "Ar_flow": {
-      "time": [],
-      "flow": []
-    },
-    "H2_flow": {
-      "time": [],
-      "flow": []
-    }
+[
+  {
+    "Order": 1,
+    "A": "Se",
+    "B": "MoO3",
+    "mass_A": 6,
+    "mass_B": 0.52,
+    "Substrate": "SiO2",
+    "A_step1_temperature": 25,
+    "A_step1_time": 1.5,
+    "A_step2_temperature": 100,
+    "A_step2_time": 1,
+    "A_step3_temperature": 100,
+    "A_step3_time": 1,
+    "A_step4_temperature": 80,
+    "A_end_time": -121,
+    "B_step1_temperature": 25,
+    "B_step1_time": 1.5,
+    "B_step2_temperature": 100,
+    "B_step2_time": 1,
+    "B_step3_temperature": 100,
+    "B_step3_time": 1,
+    "B_step4_temperature": 80,
+    "B_end_time": -121,
+    "Ar_step1_time": "00:00:01",
+    "Ar_step1_flow": 36,
+    "Ar_step3_time": "00:00:11",
+    "Ar_end_flow": 36,
+    "H2_step1_time": "00:00:01",
+    "H2_step1_flow": 4,
+    "H2_step3_time": "00:00:11",
+    "H2_end_flow": 4
+  },
+  {
+    "Order": 2,
+    "A": "Se",
+    "B": "MoO3",
+    "mass_A": 6,
+    "mass_B": 0.74,
+    "Substrate": "SiO2",
+    "A_step1_temperature": 25,
+    "A_step1_time": 1.5,
+    "A_step2_temperature": 100,
+    "A_step2_time": 1,
+    "A_step3_temperature": 100,
+    "A_step3_time": 1,
+    "A_step4_temperature": 80,
+    "A_end_time": -121,
+    "B_step1_temperature": 25,
+    "B_step1_time": 1.5,
+    "B_step2_temperature": 100,
+    "B_step2_time": 1,
+    "B_step3_temperature": 100,
+    "B_step3_time": 1,
+    "B_step4_temperature": 80,
+    "B_end_time": -121,
+    "Ar_step1_time": "00:00:01",
+    "Ar_step1_flow": 36,
+    "Ar_step3_time": "00:00:11",
+    "Ar_end_flow": 36,
+    "H2_step1_time": "00:00:01",
+    "H2_step1_flow": 4,
+    "H2_step3_time": "00:00:11",
+    "H2_end_flow": 4
+  },
+  {
+    "Order": 3,
+    "A": "Se",
+    "B": "MoO3",
+    "mass_A": 6,
+    "mass_B": 0.85,
+    "Substrate": "SiO2",
+    "A_step1_temperature": 25,
+    "A_step1_time": 1.5,
+    "A_step2_temperature": 100,
+    "A_step2_time": 1,
+    "A_step3_temperature": 100,
+    "A_step3_time": 1,
+    "A_step4_temperature": 80,
+    "A_end_time": -121,
+    "B_step1_temperature": 25,
+    "B_step1_time": 1.5,
+    "B_step2_temperature": 100,
+    "B_step2_time": 1,
+    "B_step3_temperature": 100,
+    "B_step3_time": 1,
+    "B_step4_temperature": 80,
+    "B_end_time": -121,
+    "Ar_step1_time": "00:00:01",
+    "Ar_step1_flow": 36,
+    "Ar_step3_time": "00:00:11",
+    "Ar_end_flow": 36,
+    "H2_step1_time": "00:00:01",
+    "H2_step1_flow": 4,
+    "H2_step3_time": "00:00:11",
+    "H2_end_flow": 4
+  },
+  {
+    "Order": 4,
+    "A": "Se",
+    "B": "MoO3",
+    "mass_A": 6,
+    "mass_B": 0.63,
+    "Substrate": "SiO2",
+    "A_step1_temperature": 25,
+    "A_step1_time": 1.5,
+    "A_step2_temperature": 100,
+    "A_step2_time": 1,
+    "A_step3_temperature": 100,
+    "A_step3_time": 1,
+    "A_step4_temperature": 80,
+    "A_end_time": -121,
+    "B_step1_temperature": 25,
+    "B_step1_time": 1.5,
+    "B_step2_temperature": 100,
+    "B_step2_time": 1,
+    "B_step3_temperature": 100,
+    "B_step3_time": 1,
+    "B_step4_temperature": 80,
+    "B_end_time": -121,
+    "Ar_step1_time": "00:00:01",
+    "Ar_step1_flow": 36,
+    "Ar_step3_time": "00:00:11",
+    "Ar_end_flow": 36,
+    "H2_step1_time": "00:00:01",
+    "H2_step1_flow": 4,
+    "H2_step3_time": "00:00:11",
+    "H2_end_flow": 4
+  },
+  {
+    "Order": 5,
+    "A": "Se",
+    "B": "MoO3",
+    "mass_A": 6,
+    "mass_B": 0.4,
+    "Substrate": "SiO2",
+    "A_step1_temperature": 25,
+    "A_step1_time": 1.5,
+    "A_step2_temperature": 100,
+    "A_step2_time": 1,
+    "A_step3_temperature": 100,
+    "A_step3_time": 1,
+    "A_step4_temperature": 80,
+    "A_end_time": -121,
+    "B_step1_temperature": 25,
+    "B_step1_time": 1.5,
+    "B_step2_temperature": 100,
+    "B_step2_time": 1,
+    "B_step3_temperature": 100,
+    "B_step3_time": 1,
+    "B_step4_temperature": 80,
+    "B_end_time": -121,
+    "Ar_step1_time": "00:00:01",
+    "Ar_step1_flow": 36,
+    "Ar_step3_time": "00:00:11",
+    "Ar_end_flow": 36,
+    "H2_step1_time": "00:00:01",
+    "H2_step1_flow": 4,
+    "H2_step3_time": "00:00:11",
+    "H2_end_flow": 4
   }
-}
+]
 ```
 
 ### 请求参数
 
 |名称|位置|类型|必选|说明|
 |---|---|---|---|---|
+|experiment_id|query|string| 否 |none|
 |body|body|object| 否 |none|
 
 > 返回示例
@@ -189,9 +326,32 @@ GET /get_status
 |»» 进度|string|true|none||none|
 |» message|string|true|none||none|
 
-## GET 查询任务结果
+## GET 查询任务结果视频
 
 GET /download_video
+
+### 请求参数
+
+|名称|位置|类型|必选|说明|
+|---|---|---|---|---|
+|experiment_id|query|string| 否 |none|
+|task_id|query|string| 否 |none|
+
+> 返回示例
+
+> 200 Response
+
+### 返回结果
+
+|状态码|状态码含义|说明|数据模型|
+|---|---|---|---|
+|200|[OK](https://tools.ietf.org/html/rfc7231#section-6.3.1)|none|Inline|
+
+### 返回数据结构
+
+## GET 查询任务结果图片
+
+GET /download_image
 
 ### 请求参数
 
