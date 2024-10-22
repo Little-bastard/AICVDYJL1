@@ -4,8 +4,9 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, time as dt_time
 from pathlib import Path
+from typing import Union
 
 import cv2
 import numpy as np
@@ -126,6 +127,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def onApplyConfiguration(self):
         if self.cfg_file:
             self.stop_experiment()
+            self.lbl_order.clear()
             self.BT_apply_cfg.setChecked(True)
             self.BT_apply_cfg.setStyleSheet(self.selected_color)
             self.order = 1
@@ -295,6 +297,19 @@ class AICVD(QMainWindow, Ui_MainWindow):
         # 更新任务进度管理表
         self.updateTaskTable("开始时间", f'{self.exp_start_time}')
 
+    def to_time(self, time_value: Union[str, datetime, dt_time]) -> dt_time:
+        if isinstance(time_value, dt_time):
+            # 如果已经是 datetime.time 对象，直接返回
+            return time_value
+        elif isinstance(time_value, datetime):
+            # 如果是 datetime.datetime 对象，提取时间部分
+            return time_value.time()
+        elif isinstance(time_value, str):
+            # 如果是字符串，解析为 datetime.datetime 对象，然后提取时间部分
+            return datetime.strptime(time_value, '%H:%M:%S').time()
+        else:
+            raise ValueError("Unsupported time format")
+
     def air_transform(self, **kwargs):
         print(f'transform air')
         for key, value in kwargs.items():
@@ -314,8 +329,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
         if Ar and H2:
             for i in range(int(len(Ar) / 2)):
                 index = i * 2
-                t_ar = Ar[index]
-                t_h2 = H2[index]
+                t_ar = self.to_time(Ar[index])
+                t_h2 = self.to_time(H2[index])
                 ar = Ar[index+1]
                 h2 = H2[index+1]
                 if t_ar == t_h2:
