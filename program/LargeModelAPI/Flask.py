@@ -16,7 +16,7 @@ app = Flask(__name__)
 class FlaskThread(QThread):
     start_experiment_signal = pyqtSignal()
     stop_experiment_signal = pyqtSignal()
-    set_parameters_signal = pyqtSignal()
+    set_parameters_signal = pyqtSignal(str)
 
     def run(self):
         @app.route('/start_experiment', methods=['POST'])
@@ -38,7 +38,7 @@ class FlaskThread(QThread):
             df = pd.DataFrame(data)
             filepath = os.path.join(exp_config_path, f'{exp_id}.xlsx')
             df.to_excel(filepath, index=False)
-            self.set_parameters_signal.emit()
+            self.set_parameters_signal.emit(exp_id)
             return jsonify({"message": "参数已设定"}), 200
 
         @app.route('/get_status', methods=['GET'])

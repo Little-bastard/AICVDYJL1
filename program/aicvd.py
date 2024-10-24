@@ -112,9 +112,12 @@ class AICVD(QMainWindow, Ui_MainWindow):
         # 隐藏工具提示
         QToolTip.hideText()
 
-    def onSelectConfigFile(self):
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open File", f'{config_directory_path}/total_config',
-                                                   "XLSX Files (*.xlsx);;All Files (*)")
+    def onSelectConfigFile(self, exp_id=None):
+        if exp_id:
+            file_path = os.path.join(config_directory_path, 'exp_config', f'{exp_id}.xlsx')
+        else:
+            file_path, _ = QFileDialog.getOpenFileName(self, "Open File", f'{config_directory_path}/exp_config',
+                                                       "XLSX Files (*.xlsx);;All Files (*)")
         filename, file_extension = os.path.splitext(os.path.basename(file_path))
         if filename:
             self.lbl_cfg.setText(f'{filename}{file_extension}')
@@ -190,8 +193,12 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def stop_experiment2(self):
         print("实验停止了！")
 
-    def set_parameters_table(self):
+    def set_parameters_table(self, exp_id):
         print("设置参数表")
+        # 选择参数表
+        self.onSelectConfigFile(exp_id)
+        # 应用参数表
+        self.onApplyConfiguration()
 
     def stop_experiment(self):
         # 停止录像
@@ -274,15 +281,12 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 print(f'启动实验')
                 self.updateTaskTable("进度", "0%")
                 self.updateTaskTable("任务状态", "进行中")
-                # video_path = r'D:\pythonproject\AICVD\program\video\材料视频.mp4'
-                # self.updateTaskTable("视频结果", f"{video_path}")
-                # image_path = r'D:\pythonproject\AICVD\program\image\result.jpg'
-                # self.updateTaskTable("图像结果", f'{image_path}')
-
         except Exception as e:
             print(e)
 
     def onRunAll(self):
+        # 显微镜切换回原来的分辨率
+        self.cmb_res.setCurrentIndex(self.res)
         # 开始运行温控程序
         self.onRunA()
         self.onRunB()
@@ -2043,7 +2047,6 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 self.restartFlag = True
                 # 在这里解决显微镜图像卡住的bug, 切换分辨率，再切换回来。
                 self.cmb_res.setCurrentIndex(2)
-                self.cmb_res.setCurrentIndex(self.res)
             if plc_signal == (0, 0, 0, 0, 1, 1, 1, 1, 0, 0):
                 self.restartFlag = False
         if self.IsExpEnd and self.restartFlag:
