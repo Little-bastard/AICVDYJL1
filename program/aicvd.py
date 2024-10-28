@@ -49,6 +49,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def __init__(self, parent=None):
         super(AICVD, self).__init__(parent)
+        self.signal_mode = 0
+        self.start_sending = None
         self.exp_id = None
         self.out_image_path = None
         self.timer_temperature_window = None
@@ -276,6 +278,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 self.IsLaunched = True
                 self.BT_launch_experiment.setText("停止实验")
                 self.lbl_order.setText(f'{self.order}/{self.total_order}')
+                # 停止发送信号
+                self.stop_send()
                 # 清洗MFC
                 self.cleanMFC()
                 print(f'启动实验')
@@ -1927,17 +1931,33 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.startCounting = True
 
     def onSendSignal(self):
-        '''发送开炉信号'''
+        if not self.start_sending:
+            self.start_send()
+        else:
+            self.stop_send()
+
+    def start_send(self):
+        self.start_sending = True
+        self.BT_sendSignal.setChecked(True)
+        self.BT_sendSignal.setStyleSheet(self.selected_color)
+
+    def stop_send(self):
+        self.start_sending = False
+        self.BT_sendSignal.setChecked(False)
+        self.BT_sendSignal.setStyleSheet(self.default_color)
+
+    def send_signal(self):
+        """ 发送开炉信号 """
         if self.slave:
             self.slave.set_values('0', 0, [121])
             print(f"send signal: {'0', 0, [121]}")
 
-    def onSendDefaultSignal(self):
-        # self.signal_comm.write_signal(value=232)
+    def send_default_signal(self):
         if self.slave:
             self.slave.set_values('0', 0, [120])
+            print(f"send signal: {'0', 0, [120]}")
 
-    def onSendrerunSignal(self):
+    def send_rerun_signal(self):
         if self.slave:
             self.slave.set_values('0', 0, [63])
             print(f"send signal: {'0', 0, [63]}")
@@ -2020,18 +2040,27 @@ class AICVD(QMainWindow, Ui_MainWindow):
             if self.tempdevData[1].step == len(self.program_b[0]) - 1:
                 self.is_final_step_b = True
             if self.temp_threshold_low and self.temp_threshold_high:
-                if self.is_final_step_b and self.temp_threshold_low < self.tempdevData[1].pv < self.temp_threshold_high and self.restartFlag is False:
-                    self.onSendSignal()
+                if (self.is_final_step_b and self.temp_threshold_low < self.tempdevData[1].pv < self.temp_threshold_high
+                        and self.restartFlag is False):
+                    self.signal_mode = 1
                     self.IsExpEnd = True
                 elif self.restartFlag is True:
-                    self.onSendrerunSignal()
+                    self.signal_mode = 2
                 else:
-                    self.onSendDefaultSignal()
+                    self.signal_mode = 0
+        # 如果手动点击发送信号按钮且实验停止状态，可强制为模式1，发送开炉信号
+        if self.start_sending and not self.IsLaunched:
+            self.signal_mode = 1
+        if self.signal_mode == 1:
+            self.send_signal()
+        if self.signal_mode == 2:
+            self.send_rerun_signal()
+        if self.signal_mode == 0:
+            self.send_default_signal()
 
         if self.IsExpEnd and not self.IsResultSaved:
             # 保存结果
             self.out_image_path = self.onBtnSnap2()
-
             self.onSaveResult()
             self.IsResultSaved = True
             # 停止本轮实验
