@@ -293,7 +293,8 @@ GET /get_status
     {
       "任务id": 0,
       "任务状态": "string",
-      "任务结果": "string",
+      "图像结果": "string",
+      "视频结果": "string",
       "实验id": "string",
       "开始时间": "string",
       "结束时间": null,
@@ -319,11 +320,12 @@ GET /get_status
 |» data|[object]|true|none||none|
 |»» 任务id|integer|true|none||none|
 |»» 任务状态|string|true|none||none|
-|»» 任务结果|string¦null|true|none||none|
+|»» 图像结果|string¦null|true|none||none|
+|»» 视频结果|string¦null|true|none||none|
 |»» 实验id|string|true|none||none|
 |»» 开始时间|string¦null|true|none||none|
 |»» 结束时间|null|true|none||none|
-|»» 进度|string|true|none||none|
+|»» 进度|string¦null|true|none||none|
 |» message|string|true|none||none|
 
 ## GET 查询任务结果视频

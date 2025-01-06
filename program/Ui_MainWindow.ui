@@ -12,8 +12,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>2651</width>
-    <height>1152</height>
+    <width>2643</width>
+    <height>1123</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -53,8 +53,8 @@
         <rect>
          <x>0</x>
          <y>0</y>
-         <width>2631</width>
-         <height>1056</height>
+         <width>2623</width>
+         <height>1027</height>
         </rect>
        </property>
        <layout class="QHBoxLayout" name="horizontalLayout_17">
@@ -114,7 +114,7 @@
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout_20">
                      <item>
-                      <layout class="QHBoxLayout" name="horizontalLayout_7">
+                      <layout class="QHBoxLayout" name="horizontalLayout_7" stretch="0,0,0">
                        <item>
                         <widget class="QPushButton" name="BT_select_cfg">
                          <property name="sizePolicy">
@@ -141,12 +141,6 @@
                            <horstretch>0</horstretch>
                            <verstretch>0</verstretch>
                           </sizepolicy>
-                         </property>
-                         <property name="maximumSize">
-                          <size>
-                           <width>230</width>
-                           <height>23</height>
-                          </size>
                          </property>
                          <property name="text">
                           <string/>
@@ -1637,6 +1631,96 @@
                        </property>
                        <layout class="QVBoxLayout" name="verticalLayout_5">
                         <item>
+                         <layout class="QHBoxLayout" name="horizontalLayout_48">
+                          <item>
+                           <widget class="QLabel" name="label_22">
+                            <property name="sizePolicy">
+                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                             </sizepolicy>
+                            </property>
+                            <property name="minimumSize">
+                             <size>
+                              <width>30</width>
+                              <height>20</height>
+                             </size>
+                            </property>
+                            <property name="text">
+                             <string>端口：</string>
+                            </property>
+                           </widget>
+                          </item>
+                          <item>
+                           <widget class="QComboBox" name="CBB_focus_port">
+                            <property name="sizePolicy">
+                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                             </sizepolicy>
+                            </property>
+                            <property name="minimumSize">
+                             <size>
+                              <width>78</width>
+                              <height>20</height>
+                             </size>
+                            </property>
+                           </widget>
+                          </item>
+                          <item>
+                           <spacer name="horizontalSpacer_8">
+                            <property name="orientation">
+                             <enum>Qt::Horizontal</enum>
+                            </property>
+                            <property name="sizeHint" stdset="0">
+                             <size>
+                              <width>40</width>
+                              <height>20</height>
+                             </size>
+                            </property>
+                           </spacer>
+                          </item>
+                          <item>
+                           <widget class="QPushButton" name="BT_focus_connect">
+                            <property name="sizePolicy">
+                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                             </sizepolicy>
+                            </property>
+                            <property name="minimumSize">
+                             <size>
+                              <width>80</width>
+                              <height>23</height>
+                             </size>
+                            </property>
+                            <property name="text">
+                             <string>连接</string>
+                            </property>
+                           </widget>
+                          </item>
+                          <item>
+                           <widget class="QPushButton" name="BT_focus_ems">
+                            <property name="sizePolicy">
+                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                             </sizepolicy>
+                            </property>
+                            <property name="minimumSize">
+                             <size>
+                              <width>60</width>
+                              <height>23</height>
+                             </size>
+                            </property>
+                            <property name="text">
+                             <string>急停</string>
+                            </property>
+                           </widget>
+                          </item>
+                         </layout>
+                        </item>
+                        <item>
                          <layout class="QHBoxLayout" name="horizontalLayout_22">
                           <item>
                            <widget class="QPushButton" name="BT_focus_up">
@@ -1648,7 +1732,7 @@
                             </property>
                             <property name="minimumSize">
                              <size>
-                              <width>80</width>
+                              <width>60</width>
                               <height>23</height>
                              </size>
                             </property>
@@ -1673,6 +1757,83 @@
                             </property>
                             <property name="text">
                              <string>设定上限位</string>
+                            </property>
+                           </widget>
+                          </item>
+                          <item>
+                           <widget class="QPushButton" name="BT_focus_setSpeed">
+                            <property name="sizePolicy">
+                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                             </sizepolicy>
+                            </property>
+                            <property name="minimumSize">
+                             <size>
+                              <width>80</width>
+                              <height>23</height>
+                             </size>
+                            </property>
+                            <property name="text">
+                             <string>设定速度</string>
+                            </property>
+                           </widget>
+                          </item>
+                          <item>
+                           <widget class="QComboBox" name="CBB_focus_speed">
+                            <property name="sizePolicy">
+                             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                             </sizepolicy>
+                            </property>
+                            <property name="minimumSize">
+                             <size>
+                              <width>60</width>
+                              <height>23</height>
+                             </size>
+                            </property>
+                           </widget>
+                          </item>
+                         </layout>
+                        </item>
+                        <item>
+                         <layout class="QHBoxLayout" name="horizontalLayout_43">
+                          <item>
+                           <widget class="QPushButton" name="BT_focus_down">
+                            <property name="sizePolicy">
+                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                             </sizepolicy>
+                            </property>
+                            <property name="minimumSize">
+                             <size>
+                              <width>60</width>
+                              <height>23</height>
+                             </size>
+                            </property>
+                            <property name="text">
+                             <string>下降</string>
+                            </property>
+                           </widget>
+                          </item>
+                          <item>
+                           <widget class="QPushButton" name="BT_focus_setDownLimit">
+                            <property name="sizePolicy">
+                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                              <horstretch>0</horstretch>
+                              <verstretch>0</verstretch>
+                             </sizepolicy>
+                            </property>
+                            <property name="minimumSize">
+                             <size>
+                              <width>80</width>
+                              <height>23</height>
+                             </size>
+                            </property>
+                            <property name="text">
+                             <string>设定下限位</string>
                             </property>
                            </widget>
                           </item>
@@ -1730,83 +1891,6 @@
                             </property>
                             <property name="text">
                              <string/>
-                            </property>
-                           </widget>
-                          </item>
-                         </layout>
-                        </item>
-                        <item>
-                         <layout class="QHBoxLayout" name="horizontalLayout_43">
-                          <item>
-                           <widget class="QPushButton" name="BT_focus_down">
-                            <property name="sizePolicy">
-                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                              <horstretch>0</horstretch>
-                              <verstretch>0</verstretch>
-                             </sizepolicy>
-                            </property>
-                            <property name="minimumSize">
-                             <size>
-                              <width>80</width>
-                              <height>23</height>
-                             </size>
-                            </property>
-                            <property name="text">
-                             <string>下降</string>
-                            </property>
-                           </widget>
-                          </item>
-                          <item>
-                           <widget class="QPushButton" name="BT_focus_setDownLimit">
-                            <property name="sizePolicy">
-                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                              <horstretch>0</horstretch>
-                              <verstretch>0</verstretch>
-                             </sizepolicy>
-                            </property>
-                            <property name="minimumSize">
-                             <size>
-                              <width>80</width>
-                              <height>23</height>
-                             </size>
-                            </property>
-                            <property name="text">
-                             <string>设定下限位</string>
-                            </property>
-                           </widget>
-                          </item>
-                          <item>
-                           <widget class="QPushButton" name="BT_focus_setSpeed">
-                            <property name="sizePolicy">
-                             <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-                              <horstretch>0</horstretch>
-                              <verstretch>0</verstretch>
-                             </sizepolicy>
-                            </property>
-                            <property name="minimumSize">
-                             <size>
-                              <width>80</width>
-                              <height>23</height>
-                             </size>
-                            </property>
-                            <property name="text">
-                             <string>设定速度</string>
-                            </property>
-                           </widget>
-                          </item>
-                          <item>
-                           <widget class="QComboBox" name="CBB_focus_speed">
-                            <property name="sizePolicy">
-                             <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-                              <horstretch>0</horstretch>
-                              <verstretch>0</verstretch>
-                             </sizepolicy>
-                            </property>
-                            <property name="minimumSize">
-                             <size>
-                              <width>60</width>
-                              <height>23</height>
-                             </size>
                             </property>
                            </widget>
                           </item>
@@ -4666,7 +4750,7 @@ color: rgb(0, 0, 0);</string>
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>2651</width>
+     <width>2643</width>
      <height>22</height>
     </rect>
    </property>

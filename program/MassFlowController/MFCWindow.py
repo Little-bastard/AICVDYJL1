@@ -213,27 +213,12 @@ class MFCWorker(QThread):
             try:
                 for i in range(16):
                     sv = self.mfc_comm.read_sv(id=i)
-                    # if i == 2 or i == 0:
-                    #     sv = 20
                     if sv is not None:
                         pv = self.mfc_comm.read_pv(id=i)
                         cmode = self.mfc_comm.read_switch_single(id=i, addr=3)
                         switch_state = self.mfc_comm.read_switch_vctrl(id=i)
                         unit = self.mfc_comm.read_unit(id=i)
                         fs = self.mfc_comm.read_fs(id=i)
-                        # if i == 2:
-                        #     pv = 20
-                        #     cmode = 1
-                        #     switch_state = 2
-                        #     unit = 'mL/min'
-                        #     fs = 500
-                        # if i == 0:
-                        #     pv = 18
-                        #     cmode = 0
-                        #     switch_state = 1
-                        #     unit = 'mL/min'
-                        #     fs = 100
-
                         if None in [sv, pv, cmode, switch_state, unit, fs]:
                             self.result[i] = None
                         else:

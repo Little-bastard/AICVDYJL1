@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import time
+import traceback
 from datetime import datetime, time as dt_time
 from pathlib import Path
 from typing import Union
@@ -26,6 +27,7 @@ import modbus_tk.defines as cst
 from serial.tools import list_ports
 
 from program.LargeModelAPI.Flask import FlaskThread
+from program.MicroscopeDev.FocusWorker import FocusWorker
 from program.MicroscopeDev.ImageLabel import DrawableLabel
 
 from program.MassFlowController.MFCWindow import MFCWorker, MFCInputData, MFCProgramTableDialog
@@ -49,6 +51,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def __init__(self, parent=None):
         super(AICVD, self).__init__(parent)
+        self.focus_velocity = None
+        self.focusData = None
+        self.focus_worker = None
         self.signal_mode = 0
         self.start_sending = None
         self.exp_id = None
@@ -75,6 +80,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.showSettings = False
         self.setupUi(self)
         self.init_microscope_ui()
+        self.init_focus_ui()
         self.init_tempctrl_ui()
         self.init_robot_ui()
         self.init_mfc_ui()
@@ -106,6 +112,74 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.timer_main.timeout.connect(self.main_loop)
         self.timer_main.start(1000)
 
+    def onConnectFocus(self):
+        if self.focus_worker:
+            self.closeFocus()
+        else:
+            self.startFocus()
+
+    def startFocus(self):
+        try:
+            print(f'CBB_focus_port:{self.CBB_focus_port.currentText()}')
+            self.focus_worker = FocusWorker(portName=self.CBB_focus_port.currentText())
+        except Exception as e:
+            print(f"An error occurred connect to focus comm: {e}")
+            QMessageBox.critical(self, "Error", f"An error occurred connect to focus comm: {e}")
+        if self.focus_worker:
+            self.timer_focus_window.start(1000)
+            self.focus_worker.focus_signal.connect(self.handle_result_focus)
+            self.focus_worker.start()
+            self.BT_focus_connect.setText("断开")
+
+    def closeFocus(self):
+        self.timer_focus_window.stop()
+        self.lbl_focus_position.setText("")
+        if self.focus_worker:
+            self.focus_worker.stop_run()
+        self.focus_worker = None
+        self.BT_focus_connect.setText("连接")
+
+
+    def handle_result_focus(self, result):
+        self.focusData = result
+
+    def onFocusUp(self):
+        if self.focus_velocity is not None:
+            self.focus_worker.move_up(self.focus_velocity)
+
+    def onFocusDown(self):
+        if self.focus_velocity is not None:
+            self.focus_worker.move_down(-self.focus_velocity)
+
+    def onSetUpLimit(self):
+        self.focus_worker.set_high_limit()
+
+    def onSetDownLimit(self):
+        self.focus_worker.set_low_limit()
+
+    def onSetZero(self):
+        self.focus_worker.set_zero_position()
+
+    def onSetSpeed(self):
+        index = self.CBB_focus_speed.currentIndex()
+        if index == 0:
+            self.focus_velocity = 1
+        if index == 1:
+            self.focus_velocity = 2
+        if index == 2:
+            self.focus_velocity = 20
+        if index == 3:
+            self.focus_velocity = 200
+        if index == 4:
+            self.focus_velocity = 2000
+        if index == 5:
+            self.focus_velocity = 20000
+        if index == 6:
+            self.focus_velocity = 200000
+
+    def onFocusEMS(self):
+        self.focus_worker.stop_abruptly()
+
     def showCfgTooltip(self, event):
         # 显示工具提示
         QToolTip.showText(event.globalPos(), self.lbl_cfg.toolTip(), self.lbl_cfg)
@@ -131,7 +205,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def onApplyConfiguration(self):
         if self.cfg_file:
-            self.stop_experiment()
+            if self.IsLaunched:
+                self.stop_experiment()
             self.lbl_order.clear()
             self.BT_apply_cfg.setChecked(True)
             self.BT_apply_cfg.setStyleSheet(self.selected_color)
@@ -210,8 +285,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.onStopB()
         # 停止流量计
         for idev in range(self.mfc_dev_num):
-            if self.worker_mfc:
-                self.worker_mfc.write_data('switch',
+            if self.mfc_worker:
+                self.mfc_worker.write_data('switch',
                                            MFCInputData(value=True, id=idev, addr=0))
         self.IsLaunched = False
         self.BT_launch_experiment.setText("启动实验")
@@ -255,20 +330,20 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 print(f'mfc_program_H2: {self.mfc_program_H2}')
                 # 将参数写入对应设备
                 # 将温度程序参数写入温控设备
-                if self.worker_temp:
+                if self.temp_worker:
                     for i in range(len(self.temperature_program_a)):
                         iparam = 80 + i
-                        self.worker_temp.write_data(
+                        self.temp_worker.write_data(
                             TempInputData(iParamNo=iparam, Value=self.temperature_program_a[i], iDevAdd=1))
                     self.lbl_buffer_a.setText(f'{self.temperature_program_name_a}')
                     for i in range(len(self.temperature_program_b)):
                         iparam = 80 + i
-                        self.worker_temp.write_data(
+                        self.temp_worker.write_data(
                             TempInputData(iParamNo=iparam, Value=self.temperature_program_b[i], iDevAdd=2))
                     self.lbl_buffer_b.setText(f'{self.temperature_program_name_b}')
                     self.program_a = (self.temperature_program_a[0::2], self.temperature_program_a[1::2])
                     self.program_b = (self.temperature_program_b[0::2], self.temperature_program_b[1::2])
-                    self.worker_temp.read_program_settings()
+                    self.temp_worker.read_program_settings()
                 # 将流量写入MFC
                 # 先将各纯气体流量值转化为各设备通道输入值
                 self.air_transform(Ar=self.mfc_program_Ar, H2=self.mfc_program_H2)
@@ -285,6 +360,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 print(f'启动实验')
                 self.updateTaskTable("进度", "0%")
                 self.updateTaskTable("任务状态", "进行中")
+                # 测试用
+                # self.updateTaskTable("图像结果", r"D:\pythonproject\AICVD\program\image\result.jpg")
+                # self.updateTaskTable("视频结果", r"D:\pythonproject\AICVD\program\video\材料视频.mp4")
         except Exception as e:
             print(e)
 
@@ -386,7 +464,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     # MFC RELATED
     def init_mfc_ui(self):
-        self.worker_mfc = None
+        self.mfc_worker = None
         self.mfc_dev_num = 16
         self.mfcData = [None for _ in range(self.mfc_dev_num)]
         self.mfc_schedules = [{} for _ in range(self.mfc_dev_num)]
@@ -444,10 +522,10 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 print("Dialog was accepted.")
 
     def onLaunchMFCProgram(self):
-        if self.worker_mfc:
+        if self.mfc_worker:
             for idev in range(self.mfc_dev_num):
-                self.worker_mfc.write_data('switch', MFCInputData(value=True, id=idev, addr=1))
-                self.worker_mfc.write_data('switch', MFCInputData(value=True, id=idev, addr=3))
+                self.mfc_worker.write_data('switch', MFCInputData(value=True, id=idev, addr=1))
+                self.mfc_worker.write_data('switch', MFCInputData(value=True, id=idev, addr=3))
             self.mfc_launch_time = time.time()
             self.timer_mfc_program.start(1000)
 
@@ -483,9 +561,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def writeToMFC(self, idev, value):
         # 写入设备
-        if self.worker_mfc:
+        if self.mfc_worker:
             print(f"Writing value {value} to device {idev} at {QTime.currentTime().toString('HH:mm:ss')}")
-            self.worker_mfc.write_data('sv', MFCInputData(value=value, id=idev))
+            self.mfc_worker.write_data('sv', MFCInputData(value=value, id=idev))
 
     def createMFCFig(self):
         # 创建一个Figure和FigureCanvas
@@ -512,7 +590,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.line_mfc_sv = [self.ax_mfc.plot([], [], 'b-')[0] for _ in range(self.mfc_dev_num)]
 
     def onConnectMFC(self):
-        if self.worker_mfc:
+        if self.mfc_worker:
             self.closeMFC()
         else:
             self.startMFC()
@@ -520,15 +598,15 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def startMFC(self):
         try:
             print(f'CBB_mfc_port:{self.CBB_mfc_port.currentText()}')
-            self.worker_mfc = MFCWorker(portName=self.CBB_mfc_port.currentText(),
+            self.mfc_worker = MFCWorker(portName=self.CBB_mfc_port.currentText(),
                                         baudRate=self.CBB_mfc_buadrate.currentText())
         except Exception as e:
             print(f"An error occurred connect to mfc comm: {e}")
             QMessageBox.critical(self, "Error", f"An error occurred connect to mfc comm: {e}")
-        if self.worker_mfc:
+        if self.mfc_worker:
             self.timer_mfc_window.start(self.mfc_time_interval)
-            self.worker_mfc.result_signal.connect(self.handle_result_mfc)
-            self.worker_mfc.start()
+            self.mfc_worker.result_signal.connect(self.handle_result_mfc)
+            self.mfc_worker.start()
             self.GB_mfc_setSV.setEnabled(True)
             self.GB_mfc_switch.setEnabled(True)
             self.GB_mfc_crtlmode.setEnabled(True)
@@ -555,9 +633,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
             lbl_pv_mfc.setText("")
             lbl_sv_mfc = self.findChild(QLabel, f'lbl_sv_mfc_{i}')
             lbl_sv_mfc.setText("")
-        if self.worker_mfc:
-            self.worker_mfc.stop_run()
-        self.worker_mfc = None
+        if self.mfc_worker:
+            self.mfc_worker.stop_run()
+        self.mfc_worker = None
         self.BT_connect_mfc.setText("连接")
 
     def handle_result_mfc(self, result):
@@ -567,34 +645,34 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def onSetMFCSV(self):
         print(f'set value')
         try:
-            if self.worker_mfc:
+            if self.mfc_worker:
                 sv = float(self.SB_mfc_sv.value())
                 print(f'sv: {sv}')
                 print(f'checked_id: {self.button_group.checkedId()}')
-                self.worker_mfc.write_data('sv', MFCInputData(value=sv, id=self.button_group.checkedId()))
+                self.mfc_worker.write_data('sv', MFCInputData(value=sv, id=self.button_group.checkedId()))
         except Exception as e:
             print(f"An error occurred when set mfc value: {e}")
             QMessageBox.critical(self, "Error", f"An error occurred when set mfc value: {e}")
 
     def onValueCtrl(self):
-        if self.worker_mfc:
-            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=1))
+        if self.mfc_worker:
+            self.mfc_worker.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=1))
 
     def onSwitchClean(self):
-        if self.worker_mfc:
-            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=2))
+        if self.mfc_worker:
+            self.mfc_worker.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=2))
 
     def onSwitchClose(self):
-        if self.worker_mfc:
-            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=0))
+        if self.mfc_worker:
+            self.mfc_worker.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=0))
 
     def onAnalogMode(self):
-        if self.worker_mfc:
-            self.worker_mfc.write_data('switch', MFCInputData(value=False, id=self.button_group.checkedId(), addr=3))
+        if self.mfc_worker:
+            self.mfc_worker.write_data('switch', MFCInputData(value=False, id=self.button_group.checkedId(), addr=3))
 
     def onDigitalMode(self):
-        if self.worker_mfc:
-            self.worker_mfc.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=3))
+        if self.mfc_worker:
+            self.mfc_worker.write_data('switch', MFCInputData(value=True, id=self.button_group.checkedId(), addr=3))
 
     def updateMFCData(self):
         current_time = time.time()
@@ -699,7 +777,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     # TEMPERATURE RELATED
     def init_tempctrl_ui(self):
-        self.worker_temp = None
+        self.temp_worker = None
         self.rtu_server = None
         self.slave = None
         self.total_set_time_b = None
@@ -870,7 +948,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         print(f'current_index={current_index}')
         idev = current_index + 1
         try:
-            if self.worker_temp:
+            if self.temp_worker:
                 for row in range(self.dialog.tableWidget.rowCount()):
                     row_data = []
                     for column in range(self.dialog.tableWidget.columnCount()):
@@ -883,7 +961,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                                 iparam = row * 2 + column + 79
                                 value = float(item.text())
                                 print(f'iparam: {iparam}, value: {value}')
-                                self.worker_temp.write_data(TempInputData(iParamNo=iparam, Value=value, iDevAdd=idev))
+                                self.temp_worker.write_data(TempInputData(iParamNo=iparam, Value=value, iDevAdd=idev))
                         else:
                             break
                 if idev == 1:
@@ -892,13 +970,13 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     self.lbl_buffer_b.setText(f'{self.dialog.filename}')
                 self.dialog.saveTable()
                 QMessageBox.information(None, "文件写入", "文件写入成功！", QMessageBox.Ok)
-                self.worker_temp.read_program_settings()
+                self.temp_worker.read_program_settings()
         except Exception as e:
             print(f"An error occurred while writing to the Buffer: {e}")
             QMessageBox.critical(self, "Error", f"An error occurred while writing to the Buffer: {e}")
 
     def onConnectTempDev(self):
-        if self.worker_temp:
+        if self.temp_worker:
             self.close_temp()
         else:
             self.start_temp()
@@ -906,17 +984,17 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def start_temp(self):
         try:
             print(f'CBB_temp_port:{self.CBB_temp_port.currentText()}')
-            self.worker_temp = TempWorker(portName=f"{self.CBB_temp_port.currentText()}", baudRate=9600)
+            self.temp_worker = TempWorker(portName=f"{self.CBB_temp_port.currentText()}", baudRate=9600)
         except Exception as e:
             print(f"An error occurred connect to temperature control device: {e}")
             QMessageBox.critical(self, "Error", f"An error occurred connect to temperature control device: {e}")
 
-        if self.worker_temp:
+        if self.temp_worker:
             self.timer_temperature_window.start(self.temp_time_interval)
-            self.worker_temp.result_signal.connect(self.handle_result_temp)
-            self.worker_temp.program_signal.connect(self.handle_result_pgm)
-            self.worker_temp.start()
-            self.worker_temp.read_program_settings()
+            self.temp_worker.result_signal.connect(self.handle_result_temp)
+            self.temp_worker.program_signal.connect(self.handle_result_pgm)
+            self.temp_worker.start()
+            self.temp_worker.read_program_settings()
             self.BT_run_a.setEnabled(True)
             self.BT_hold_a.setEnabled(True)
             self.BT_stop_a.setEnabled(True)
@@ -930,8 +1008,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def close_temp(self):
         try:
             self.timer_temperature_window.stop()
-            self.worker_temp.stop_run()
-            self.worker_temp=None
+            self.temp_worker.stop_run()
+            self.temp_worker=None
             self.figure_a.clf()
             self.canvas_a.draw()
             self.VLayout_tempDisplay_a.removeWidget(self.canvas_a)
@@ -1061,41 +1139,41 @@ class AICVD(QMainWindow, Ui_MainWindow):
         # print(f'temp result updated')
 
     def onRunA(self):
-        if self.worker_temp:
+        if self.temp_worker:
             self.is_final_step_a = False
             self.BT_run_a.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=0, iDevAdd=1))
+            self.temp_worker.write_data(TempInputData(iParamNo=27, Value=0, iDevAdd=1))
             print(f'runA')
 
     def onRunB(self):
-        if self.worker_temp:
+        if self.temp_worker:
             self.is_final_step_b = False
             self.BT_run_b.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=0, iDevAdd=2))
+            self.temp_worker.write_data(TempInputData(iParamNo=27, Value=0, iDevAdd=2))
             print(f'runB')
 
     def onHoldA(self):
-        if self.worker_temp:
+        if self.temp_worker:
             self.BT_hold_a.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=2, iDevAdd=1))
+            self.temp_worker.write_data(TempInputData(iParamNo=27, Value=2, iDevAdd=1))
             print(f'holdA')
 
     def onHoldB(self):
-        if self.worker_temp:
+        if self.temp_worker:
             self.BT_hold_b.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=2, iDevAdd=2))
+            self.temp_worker.write_data(TempInputData(iParamNo=27, Value=2, iDevAdd=2))
             print(f'holdB')
 
     def onStopA(self):
-        if self.worker_temp:
+        if self.temp_worker:
             self.BT_stop_a.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=1, iDevAdd=1))
+            self.temp_worker.write_data(TempInputData(iParamNo=27, Value=1, iDevAdd=1))
             print(f'stopA')
 
     def onStopB(self):
-        if self.worker_temp:
+        if self.temp_worker:
             self.BT_stop_b.setChecked(True)
-            self.worker_temp.write_data(TempInputData(iParamNo=27, Value=1, iDevAdd=2))
+            self.temp_worker.write_data(TempInputData(iParamNo=27, Value=1, iDevAdd=2))
             print(f'stopB')
 
     def updateTempData(self):
@@ -1402,7 +1480,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
             coefficient = val / line_len_cpr
             self.lbl_video.setCoefficient(coefficient)
             self.line_mag.setFixedWidth(int(line_len_cpr))
-            self.lbl_mag.setText(f'{val}um')
+            self.lbl_mag.setText(f'{val}μm')
         except Exception as e:
             print(f'An error occurred when Magnification Changed: {e}')
 
@@ -1537,7 +1615,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                         mag = int(self.cmb_magnification.currentText())
                         val = int(self.slider_mag.value())
                         self.line_len = mag / 20 * 421 * val / 100
-                        text = f'{val}um'
+                        text = f'{val}μm'
                         qimage = self.add_text_to_image(image, text,
                                                         QPoint(image.width() - int(self.line_len) - 50, image.height() - 30),
                                                         20)
@@ -1616,6 +1694,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         except Exception as e:
             self.video_writer2.release()
             print(f'An error occurred when save video: {e}')
+            traceback.print_exc()
 
     def overlay_image(self, big_image, small_image, position):
         """
@@ -1784,7 +1863,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     mag = int(self.cmb_magnification.currentText())
                     val = int(self.slider_mag.value())
                     self.line_len = mag / 20 * 421 * val / 100
-                    text = f'{val}um'
+                    text = f'{val}μm'
                     qimage = self.add_text_to_image(image, text,
                                                     QPoint(image.width() - int(self.line_len) - 50, image.height() - 30),
                                                     20)
@@ -1859,6 +1938,31 @@ class AICVD(QMainWindow, Ui_MainWindow):
         # 将OpenCV图像数据转换为QImage
         q_image = QImage(cv_image.data, cv_image.shape[1], cv_image.shape[0], QImage.Format_RGBA8888)
         return q_image
+
+    def init_focus_ui(self):
+        self.BT_focus_connect.clicked.connect(self.onConnectFocus)
+        self.BT_focus_up.clicked.connect(self.onFocusUp)
+        self.BT_focus_down.clicked.connect(self.onFocusDown)
+        self.BT_focus_setZero.clicked.connect(self.onSetZero)
+        self.BT_focus_setSpeed.clicked.connect(self.onSetSpeed)
+        self.BT_focus_setUpLimit.clicked.connect(self.onSetUpLimit)
+        self.BT_focus_setDownLimit.clicked.connect(self.onSetDownLimit)
+        self.BT_focus_ems.clicked.connect(self.onFocusEMS)
+        ports_list = list(list_ports.comports())
+        ports_name = [port.name for port in ports_list]
+        self.CBB_focus_port.clear()
+        self.CBB_focus_port.addItems(ports_name)
+
+        speed_list = ["0.05μm", "0.1μm", "1μm", "10μm", "100μm", "1000μm", "10000μm"]
+        self.CBB_focus_speed.clear()
+        self.CBB_focus_speed.addItems(speed_list)
+
+        self.timer_focus_window = QTimer(self)
+        self.timer_focus_window.timeout.connect(self.updateFocusData)
+
+    def updateFocusData(self):
+        if self.focusData:
+            self.lbl_focus_position.setText(f'{self.focusData} μm')
 
     # ROBOT RELATED
     def init_robot_ui(self):
@@ -2014,6 +2118,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
         if self.api_thread:
             self.api_thread.stop()
             self.api_thread = None
+        if self.focus_worker:
+            self.focus_worker.stop_run()
+            self.focus_worker = None
         super().closeEvent(event)
 
     def main_loop(self):
@@ -2026,8 +2133,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 self.startCounting = False
                 self.counter = self.default_clean_time
                 # 清洗完后先关闭所有流量计阀门
-                if self.worker_mfc:
-                    self.worker_mfc.write_data('switch',
+                if self.mfc_worker:
+                    self.mfc_worker.write_data('switch',
                                                MFCInputData(value=True, id=self.button_group.checkedId(), addr=0))
                 # 再启动所有设备
                 self.onRunAll()
@@ -2048,8 +2155,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     self.signal_mode = 2
                 else:
                     self.signal_mode = 0
-        # 如果手动点击发送信号按钮且实验停止状态，可强制为模式1，发送开炉信号
-        if self.start_sending and not self.IsLaunched:
+        # 如果手动点击发送信号按钮,先停止实验，再强制为模式1，发送开炉信号。
+        if self.start_sending:
+            self.stop_experiment()
             self.signal_mode = 1
         if self.signal_mode == 1:
             self.send_signal()
