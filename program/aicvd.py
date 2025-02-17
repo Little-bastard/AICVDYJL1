@@ -328,6 +328,16 @@ class AICVD(QMainWindow, Ui_MainWindow):
                           self.params.columns.get_loc('H2_step1_time'):self.params.columns.get_loc('H2_end_flow') + 1]
                 self.mfc_program_H2 = self.params.loc[0, columns].tolist()
                 print(f'mfc_program_H2: {self.mfc_program_H2}')
+                # 氧气
+                columns = self.params.columns[
+                          self.params.columns.get_loc('O2_step1_time'):self.params.columns.get_loc('O2_end_flow') + 1]
+                self.mfc_program_O2 = self.params.loc[0, columns].tolist()
+                print(f'mfc_program_O2: {self.mfc_program_O2}')
+                # 二氧化碳
+                columns = self.params.columns[
+                          self.params.columns.get_loc('CO2_step1_time'):self.params.columns.get_loc('CO2_end_flow') + 1]
+                self.mfc_program_CO2 = self.params.loc[0, columns].tolist()
+                print(f'mfc_program_CO2: {self.mfc_program_CO2}')
                 # 将参数写入对应设备
                 # 将温度程序参数写入温控设备
                 if self.temp_worker:
@@ -346,7 +356,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     self.temp_worker.read_program_settings()
                 # 将流量写入MFC
                 # 先将各纯气体流量值转化为各设备通道输入值
-                self.air_transform(Ar=self.mfc_program_Ar, H2=self.mfc_program_H2)
+                self.air_transform(Ar=self.mfc_program_Ar, H2=self.mfc_program_H2, O2=self.mfc_program_O2)
                 # 设置实验开始标志位
                 self.IsExpEnd = False
                 self.is_final_step_b = False
@@ -405,6 +415,12 @@ class AICVD(QMainWindow, Ui_MainWindow):
             if key == "H2":
                 H2 = value
                 print(f"H2 = {H2}")
+            if key == "O2":
+                O2 = value
+                print(f"O2 = {O2}")
+            if key == "CO2":
+                CO2 = value
+                print(f"CO2 = {CO2}")
             # TODO 如果有其他其他参与，在这里继续添加其他气体，还要重新写气体混合公式，以建立纯气体与设备通道之间的映射
             # if key == "xx":
             #     xx = value
@@ -412,13 +428,16 @@ class AICVD(QMainWindow, Ui_MainWindow):
         for idev in range(self.mfc_dev_num):
             self.mfc_schedules[idev].clear()
         # 将气体流量转化为设备输入值后，写入每个设备的定时输入计划，以下的公式，即为纯氩气和纯氢气与设备通道0和2之间的映射
+        # 氧气 通道4；二氧化碳通道6
         if Ar and H2:
             for i in range(int(len(Ar) / 2)):
                 index = i * 2
                 t_ar = self.to_time(Ar[index])
+                print(f'Ar array: {Ar}')
                 t_h2 = self.to_time(H2[index])
                 ar = Ar[index+1]
                 h2 = H2[index+1]
+                # 重写判断条件
                 if t_ar == t_h2:
                     t = t_ar.hour * 3600 + t_ar.minute * 60 + t_ar.second
                     sv_0 = round(h2 / 0.131, 1)
@@ -429,7 +448,24 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     print(f"error: Ar's time is not consistent with H2's")
             print(f'dev 0 schedules: {self.mfc_schedules[0]}')
             print(f'dev 2 schedules: {self.mfc_schedules[2]}')
-
+        if O2:
+            for i in range(int(len(O2) / 2)):
+                t_o2 = self.to_time(O2[index])
+                t = t_o2.hour * 3600 + t_o2.minute * 60 + t_o2.second
+                index = i * 2
+                o2 = O2[index+1]
+                sv_4 = round(o2, 1)
+                self.mfc_schedules[4][t] = sv_4
+                print(f'dev 4 schedules: {self.mfc_schedules[4]}')
+        if CO2:
+            for i in range(int(len(CO2) / 2)):
+                t_co2 = self.to_time(CO2[index])
+                t = t_co2.hour * 3600 + t_co2.minute * 60 + t_co2.second
+                index = i * 2
+                co2 = CO2[index+1]
+                sv_6 = round(co2, 1)
+                self.mfc_schedules[6][t] = sv_6
+                print(f'dev 6 schedules: {self.mfc_schedules[6]}')
     def onSaveResult(self):
         try:
             # 保存结果
@@ -1109,7 +1145,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.rtu_server.start()
             self.slave = self.rtu_server.add_slave(3)
             self.slave.add_block('0', cst.HOLDING_REGISTERS, 0, 1200)
-            self.slave.add_block('1', cst.COILS, 0, 10)
+            self.slave.add_block('1', cst.COILS, 0, 1200)
             self.BT_set_temp_threshold.setEnabled(True)
             self.BT_sendSignal.setEnabled(True)
             self.BT_connect_signalComm.setText("断开")
@@ -1579,6 +1615,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         except Exception as e:
             print(f'An error occurred when open camera: {e}')
 
+    # 打开摄像头
     def onBtnOpen(self):
         if self.hcam:
             self.closeCamera()
@@ -1601,6 +1638,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     self.cur = arr[action.data()]
                     self.openCamera()
 
+    # 拍摄快照
     def onBtnSnap(self):
         if self.hcam:
             try:

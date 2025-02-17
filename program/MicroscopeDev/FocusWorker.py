@@ -26,10 +26,12 @@ class FocusWorker(QThread):
 
     def move_up(self, distance):
         print(f'move up')
+        print(distance)
         self.focus.move_relative(distance)
 
     def move_down(self, distance):
         print(f'move down')
+        print(distance)
         self.focus.move_relative(distance)
 
     def set_high_limit(self):
