@@ -33,3 +33,8 @@ if __name__ == "__main__":
     filePath = '../image/None_None_173700_7.jpg'
     image = ss(filePath)
     print(image)
+
+
+
+
+# 测试自动对焦算法

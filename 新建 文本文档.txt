@@ -1,0 +1,4 @@
+1. 显微镜聚焦  onConnectFocus
+2. 显微镜追焦api调用，focusworker
+3. handleStillImageEvent方法提取，复制方法后去除保存图片的操作，将图片对象使用聚焦算法评价清晰度，达到阈值前反复移动调用2内的api
+4.
