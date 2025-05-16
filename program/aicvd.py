@@ -1757,8 +1757,10 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 height1, width1 = frame_a.shape[:2]
                 height2, width2 = frame_b.shape[:2]
                 height3, width3 = frame_c.shape[:2]
-                scale_factor_a = int(0.5*width3/width1)
-                scale_factor_b = int(0.5*width3/width2)
+                # scale_factor_a = int(0.5*width3/width1)
+                # scale_factor_b = int(0.5*width3/width2)
+                scale_factor_a = 0.5*width3/width1
+                scale_factor_b = 0.5*width3/width2
                 frame_a = cv2.resize(frame_a, None, fx=scale_factor_a, fy=scale_factor_a)
                 frame_b = cv2.resize(frame_b, None, fx=scale_factor_b, fy=scale_factor_b)
                 height1, width1 = frame_a.shape[:2]
