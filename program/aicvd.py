@@ -741,6 +741,15 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     if self.button_group.checkedId() == i:
                         self.lbl_mfc_sv.setText(f'{self.mfcData[i].sv} {self.mfcData[i].unit}')
                         self.lbl_mfc_pv.setText(f'{self.mfcData[i].pv} {self.mfcData[i].unit}')
+
+                        # 统计最新的流量值
+                        if self.recordFlag:
+                            timestamp = int(time.time())
+                            mfc_pv = self.mfcData[i].pv
+                            mfc_sv = self.mfcData[i].sv
+                            new_row = np.array([[timestamp, mfc_pv, mfc_sv]])
+                            self.cacheMFCData = np.vstack((self.cacheMFCData, new_row))
+
                     # 显示控制模式
                     if self.button_group.checkedId() == i:
                         if self.mfcData[i].ctrl_mode == -1:
