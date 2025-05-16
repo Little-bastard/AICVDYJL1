@@ -1830,7 +1830,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 dtime = datetime.fromtimestamp(time.time()).strftime('%H%M%S')
                 self.out_video_path = os.path.join(video_directory_path, f'{self.exp_id}_{self.order}_{dtime}.mp4')
                 self.out_video_path2 = os.path.join(video_directory_path, f'{self.exp_id}_{self.order}_{dtime}_mix.mp4')
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                # fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                fourcc = cv2.VideoWriter_fourcc(*'X264')  # 改为H264格式
                 nFrame, nTime, nTotalFrame = self.hcam.get_FrameRate()
                 frame_rate = nFrame * 1000.0 / nTime
                 resolution = (self.imgWidth, self.imgHeight)
