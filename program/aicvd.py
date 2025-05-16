@@ -1385,7 +1385,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                         progress_percent_b = int(progress_time_b / self.total_set_time_b * 100)
                         self.psbar_b.setValue(progress_percent_b)
                         # 更新任务管理表中当前任务的进度（以温区B的温度曲线进度为准）
-                        self.updateTaskTable("进度", f'{progress_percent_b}%')
+                        self.updateTaskTable("progress", f'{progress_percent_b}%')
             except Exception as e:
                 print(e)
 
