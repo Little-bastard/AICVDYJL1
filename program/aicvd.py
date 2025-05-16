@@ -238,7 +238,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.result_filepath = os.path.join(result_directory_path, filename)
             df_new.to_excel(self.result_filepath, index=False)
             #初始化任务管理表
-            headers = ["实验id", "任务id", "进度", "任务状态", "开始时间", "结束时间", "视频结果", "图像结果"]
+            headers = ["experiment_id", "task_id", "progress", "task_status", "start_time", "end_time", "video_result", "image_result", "status_code"]
             filepath = os.path.join(task_management_path, "实验任务进度管理表.csv")
             exp_file = os.path.basename(self.cfg_file)
             self.exp_id, file_extension = os.path.splitext(exp_file)
@@ -269,10 +269,16 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def updateTaskTable(self, fieldName, value):
         # 更新任务管理表
-        csv_file_path = os.path.join(task_management_path, '实验任务进度管理表.csv')
-        df = pd.read_csv(csv_file_path)
-        df.loc[df['任务id'] == self.order, fieldName] = value
-        df.to_csv(csv_file_path, index=False)
+        try:
+            csv_file_path = os.path.join(task_management_path, '实验任务进度管理表.csv')
+            df = pd.read_csv(csv_file_path)
+            if fieldName == 'video_result' or fieldName == 'image_result' or "begin_time" or "end_time" or "status":    # 任务状态,开始时间,结束时间,视频结果,图像结果
+                df[fieldName] = df[fieldName].astype('object')
+            df.loc[df['task_id'] == self.order, fieldName] = value
+            df.to_csv(csv_file_path, index=False)
+        except Exception as e:
+            print(e)
+
 
     def start_experiment2(self):
         print("实验启动了！")
@@ -302,7 +308,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.BT_launch_experiment.setText("启动实验")
         print(f'停止实验')
         # 更新任务进度管理表
-        self.updateTaskTable("任务状态", "停止中")
+        self.updateTaskTable("task_status", "停止中")
 
     def start_experiment(self):
         try:
@@ -378,12 +384,13 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 # 清洗MFC
                 self.cleanMFC()
                 print(f'启动实验')
-                self.updateTaskTable("进度", "0%")
-                self.updateTaskTable("任务状态", "进行中")
+                self.updateTaskTable("progress", "0%")
+                self.updateTaskTable("task_status", "进行中")
                 # 测试用
                 # self.updateTaskTable("图像结果", r"D:\pythonproject\AICVD\program\image\result.jpg")
                 # self.updateTaskTable("视频结果", r"D:\pythonproject\AICVD\program\video\材料视频.mp4")
         except Exception as e:
+            self.updateTaskTable("task_status", "实验执行异常")
             print(e)
 
     def onRunAll(self):
@@ -401,7 +408,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         # 记录起始时间
         self.exp_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # 更新任务进度管理表
-        self.updateTaskTable("开始时间", f'{self.exp_start_time}')
+        self.updateTaskTable("start_time", f'{self.exp_start_time}')
 
     def to_time(self, time_value: Union[str, datetime, dt_time]) -> dt_time:
         if isinstance(time_value, dt_time):
@@ -487,14 +494,14 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.params["Image"] = f'{self.out_image_path}'
             self.params["Date"] = f'{self.exp_start_time}, {current_time}'
             old_df = pd.read_excel(self.result_filepath, sheet_name=0)
-            updated_df = pd.concat([old_df, self.params], ignore_index=True)
-            updated_df.to_excel(self.result_filepath, index=False)
+            # updated_df = pd.concat([old_df, self.params], ignore_index=True)
+            # updated_df.to_excel(self.result_filepath, index=False)
             print(f'结果已保存')
             # 更新任务进度管理表
-            self.updateTaskTable("结束时间", f'{current_time}')
-            self.updateTaskTable("任务状态", "已完成")
-            self.updateTaskTable("视频结果", f'{self.out_video_path}')
-            self.updateTaskTable("图像结果", f'{self.out_image_path}')
+            self.updateTaskTable("end_time", f'{current_time}')
+            self.updateTaskTable("task_status", "已完成")
+            self.updateTaskTable("video_result", f'{self.out_video_path}')
+            self.updateTaskTable("image_result", f'{self.out_image_path}')
         except Exception as e:
             print(f'An error occurred when save result: {e}')
         try:
