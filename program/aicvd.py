@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Union
 
 import cv2
+import modbus_tk.defines as cst
 import numpy as np
 import pandas as pd
+import qdarktheme
 import serial
 from PyQt5.QtCore import QTimer, QSignalBlocker, Qt, pyqtSignal, QUrl, QCoreApplication, QPoint, QLineF, QSize, QTime
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QFont, QColor
@@ -20,24 +22,22 @@ from PyQt5.QtWidgets import (QMainWindow, QMessageBox, QMenu, QAction, QApplicat
                              QSizePolicy, QToolTip)
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-import qdarktheme
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from modbus_tk import modbus_rtu
-import modbus_tk.defines as cst
+from openpyxl.styles import Font, Alignment, PatternFill
 from serial.tools import list_ports
 
-from program.LargeModelAPI.Flask import FlaskThread
-from program.MicroscopeDev.FocusWorker import FocusWorker
-from program.MicroscopeDev.ImageLabel import DrawableLabel
-
+from program.Flask import FlaskThread
 from program.MassFlowController.MFCWindow import MFCWorker, MFCInputData, MFCProgramTableDialog
 from program.MicroscopeDev import toupcam
+from program.MicroscopeDev.FocusWorker import FocusWorker
+from program.MicroscopeDev.ImageLabel import DrawableLabel
 from program.TaskManagement.TaskManager import TaskManagerTableDialog
 from program.TempCtrlDev.TempWindow import TempProgramTableDialog, TempWorker, TempInputData
 from program.Ui_MainWindow import Ui_MainWindow
 from program.robotControl.RobotWindow import WebEngineView
 
-BASE_DIR = os.path.dirname(os.path.realpath(sys.argv[0]))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 config_directory_path = os.path.join(BASE_DIR, 'config')
 video_directory_path = os.path.join(BASE_DIR, 'video')
 image_directory_path = os.path.join(BASE_DIR, 'image')
@@ -51,6 +51,15 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def __init__(self, parent=None):
         super(AICVD, self).__init__(parent)
+        self.cacheTempData = np.empty((0, 5))
+        self.cacheMFCData = np.empty((0, 3))
+        self.combinedData = None
+        self.qimage = None
+        self.num = 0
+        self.buf =None
+        self.total = 0
+        self.laplacian_var = 20
+        self.recordFlag = False
         self.focus_velocity = None
         self.focusData = None
         self.focus_worker = None
@@ -69,6 +78,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.mfc_launch_time = None
         self.temperature_program_name_a = None
         self.temperature_program_name_b = None
+        self.temperature_program_a = None
         self.params = None
         self.order = None
         self.cfg_file = None
@@ -1327,6 +1337,16 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 self.ax_b.autoscale_view(True, True, True)  # 自动缩放
                 self.canvas_b.draw()  # 重绘画布
 
+                # 点击记录按钮，开始搜集温度数据
+                if self.recordFlag:
+                    timestamp = int(time.time())
+                    pv_a = self.line_pv_a.get_ydata()[-1]
+                    sv_a = self.line_sv_a.get_ydata()[-1]
+                    pv_b = self.line_pv_b.get_ydata()[-1]
+                    sv_b = self.line_sv_b.get_ydata()[-1]
+                    new_row = np.array([[timestamp, pv_a, sv_a, pv_b, sv_b]])
+                    self.cacheTempData = np.vstack((self.cacheTempData, new_row))
+
             # 绘制进度条
             try:
                 if self.tempdevData[0]:
@@ -1805,6 +1825,85 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 self.btn_save.setStyleSheet(self.default_color)
                 self.video_writer.release()
                 self.video_writer2.release()
+
+                # 停止记录后导出温度和流量excel
+                self.recordFlag = False
+                max_rows = max(self.cacheTempData.shape[0], self.cacheMFCData.shape[0])
+                # 填充行数不足的数组
+                padded_temp = np.pad(self.cacheTempData, ((0, max_rows - self.cacheTempData.shape[0]), (0, 0)),
+                                     mode='constant')
+                padded_mfc = np.pad(self.cacheMFCData, ((0, max_rows - self.cacheMFCData.shape[0]), (0, 0)),
+                                    mode='constant')
+                self.combinedData = np.hstack((padded_temp, padded_mfc))  # 结果形状为 (max_rows, 8)
+                self.exportExcel()
+                self.cacheTempData = np.empty((0, 5))
+                self.cacheMFCData = np.empty((0, 3))
+                self.combinedData = None
+
+    def exportExcel(self):
+        try:
+            timestamps_temp = self.combinedData[:, 0]
+            abs_time_temp = [pd.Timestamp(ts, unit='s').strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+                        for ts in timestamps_temp]
+            rel_time_temp = [round(ts - timestamps_temp[0], 3) for ts in timestamps_temp]
+
+            timestamps_mfc = self.combinedData[:, 5]
+            abs_time_mfc = [pd.Timestamp(ts, unit='s').strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+                        for ts in timestamps_mfc]
+            rel_time_mfc = [round(ts - timestamps_mfc[0], 3) for ts in timestamps_mfc]
+
+            pv_a = self.combinedData[:, 1]
+            sv_a = self.combinedData[:, 2]
+            pv_b = self.combinedData[:, 3]
+            sv_b = self.combinedData[:, 4]
+            mfc_pv = self.combinedData[:, 6]
+            mfc_sv = self.combinedData[:, 7]
+            df = pd.DataFrame({
+                "温度绝对时间": abs_time_temp,
+                "温度相对时间(s)": rel_time_temp,
+                "PV_ZoneA": pv_a,
+                "SV_ZoneA": sv_a,
+                "PV_ZoneB": pv_b,
+                "SV_ZoneB": sv_b,
+                "流量绝对时间": abs_time_mfc,
+                "流量相对时间(s)": rel_time_mfc,
+                "mfc_pv": mfc_pv,
+                "mfc_sv": mfc_sv
+            })
+
+            # 路径管理（参考网页1的目录结构）
+            today = pd.Timestamp.now().strftime("%Y-%m-%d")
+            save_dir = os.path.join(BASE_DIR, 'export', today)
+            os.makedirs(save_dir, exist_ok=True)
+
+            # 生成文件名
+            filename = f"温区流量_{pd.Timestamp.now().strftime('%H%M%S')}.xlsx"
+            excel_path = os.path.join(save_dir, filename)
+
+            # 使用openpyxl引擎导出
+            with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='双区温度', index=False)
+
+                # 获取工作表对象
+                workbook = writer.book
+                worksheet = writer.sheets['双区温度']
+
+                # 设置标题格式（参考网页5的样式配置）
+                header_font = Font(bold=True, color="FFFFFF")
+                header_fill = PatternFill(start_color='4F81BD', end_color='4F81BD', fill_type='solid')
+                for cell in worksheet[1]:
+                    cell.font = header_font
+                    cell.fill = header_fill
+                    cell.alignment = Alignment(horizontal='center')
+
+                # 设置列宽（参考网页4的列宽配置）
+                worksheet.column_dimensions['A'].width = 25
+                worksheet.column_dimensions['B'].width = 15
+
+            print(f"数据已导出至：{excel_path}")
+        except Exception as e:
+            print(f"导出异常：{str(e)}")
+            print(traceback.format_exc())
 
     @staticmethod
     def eventCallBack(nEvent, self):
