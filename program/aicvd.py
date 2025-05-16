@@ -1824,6 +1824,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 self.btn_save.setChecked(True)
                 self.btn_save.setFlat(True)
                 self.btn_save.setStyleSheet(self.selected_color)
+                today_folder = datetime.now().strftime("%Y-%m-%d")  # 创建当日日期目录
+                video_directory_path = os.path.join(BASE_DIR, 'video', today_folder)  # 构建完整存储路径
+                os.makedirs(video_directory_path, exist_ok=True)  # 自动创建目录
                 dtime = datetime.fromtimestamp(time.time()).strftime('%H%M%S')
                 self.out_video_path = os.path.join(video_directory_path, f'{self.exp_id}_{self.order}_{dtime}.mp4')
                 self.out_video_path2 = os.path.join(video_directory_path, f'{self.exp_id}_{self.order}_{dtime}_mix.mp4')
@@ -2014,9 +2017,16 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     image = QImage(buf, info.width, info.height, QImage.Format_RGB888)
                     self.count += 1
                     dtime = datetime.fromtimestamp(time.time()).strftime('%H%M%S')
-                    out_image_path = os.path.join(image_directory_path, f'{self.exp_id}_{self.order}_{dtime}_{self.count}.jpg')
-                    image.save(f'{out_image_path}')
-                    print(f'save image to {out_image_path}')
+                    # out_image_path = os.path.join(image_directory_path, f'{self.exp_id}_{self.order}_{dtime}_{self.count}.jpg')
+                    # image.save(f'{out_image_path}')
+                    # print(f'save image to {out_image_path}')
+
+                    #新建当日文件夹
+                    dtime = datetime.fromtimestamp(time.time()).strftime("%Y-%m-%d")
+                    today_folder = datetime.now().strftime("%Y-%m-%d")  # 创建当日日期目录
+                    target_dir = os.path.join(image_directory_path, today_folder)  # 构建完整存储路径
+                    os.makedirs(target_dir, exist_ok=True)  # 自动创建目录
+                    image.save(os.path.join(target_dir, f'{self.exp_id}_{self.order}_{dtime}_{self.count}.jpg'))
                     mag = int(self.cmb_magnification.currentText())
                     val = int(self.slider_mag.value())
                     self.line_len = mag / 20 * 421 * val / 100
