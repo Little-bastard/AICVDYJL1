@@ -83,7 +83,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.order = None
         self.cfg_file = None
         self.line_len = 0
-        self.default_clean_time = 10 # 默认清洗3分钟
+        self.default_clean_time = 180 # 默认清洗3分钟
         self.counter = self.default_clean_time
         self.startCounting = False
         self.restartFlag = False
