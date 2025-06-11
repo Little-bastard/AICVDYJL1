@@ -94,12 +94,13 @@ class FlaskThread(QThread):
         @app.route('/download_image', methods=['GET'])
         def download_image_api():
             try:
+                # 大模型调用时，传过来的是int类型exp_id，与平台侧不一致，暂时先不改为转为int类型
                 exp_id = request.args.get('experiment_id')
                 task_id = int(request.args.get('task_id'))
                 filepath = os.path.join(task_management_path, "实验任务进度管理表.csv")
                 df = pd.read_csv(filepath, na_filter=False)
                 print(f'df: {df}')
-                filtered_df = df[(df['experiment_id'] == int(exp_id)) & (df['task_id'] == task_id)]
+                filtered_df = df[(df['experiment_id'] == exp_id) & (df['task_id'] == task_id)]
                 print(f'filtered_df: {filtered_df}')
                 if not filtered_df.empty:
                     filepath = filtered_df['image_result'].values[0]
@@ -119,12 +120,13 @@ class FlaskThread(QThread):
         @app.route('/download_video', methods=['GET'])
         def download_video_api():
             try:
+                # 大模型调用时，传过来的是int类型exp_id，与平台侧不一致，暂时先不改为转为int类型
                 exp_id = request.args.get('experiment_id')
                 task_id = int(request.args.get('task_id'))
                 filepath = os.path.join(task_management_path, "实验任务进度管理表.csv")
                 df = pd.read_csv(filepath, na_filter=False)
                 print(f'df: {df}')
-                filtered_df = df[(df['experiment_id'] == int(exp_id)) & (df['task_id'] == task_id)]
+                filtered_df = df[(df['experiment_id'] == exp_id) & (df['task_id'] == task_id)]
                 print(f'filtered_df: {filtered_df}')
                 if not filtered_df.empty:
                     filepath = filtered_df['video_result'].values[0]
