@@ -3,7 +3,6 @@ import csv
 import json
 import os
 import sys
-import threading
 import time
 import traceback
 from datetime import datetime, time as dt_time
@@ -132,6 +131,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
         # 自动对焦相关
         self.autoFocusFlag = False
+        self.original_auto_focus_flag = None
         self.auto_focus_thread = None
         self.target_dir = None
 
@@ -1707,6 +1707,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def onBtnSnap(self):
         if self.hcam:
             try:
+                self.autoFocusFlag = False
                 if 0 == self.cur.model.still:    # not support still image capture
                     if self.pData is not None:
                         image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
@@ -1746,6 +1747,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         """自动对焦时使用的拍照方法，默认使用指定分辨率"""
         if self.hcam:
             try:
+                self.autoFocusFlag = True
                 if 0 == self.cur.model.still:  # not support still image capture
                     if self.pData is not None:
                         image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
@@ -1783,7 +1785,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
                     # 如果找到了目标分辨率，使用它；否则使用第一个可用分辨率
                     if default_resolution_index != -1:
-                        print(f'自动对焦使用分辨率: {target_width}*{target_height}')
+                        # print(f'自动对焦使用分辨率: {target_width}*{target_height}')
                         self.hcam.Snap(default_resolution_index)
                     else:
                         # 如果没有找到目标分辨率，打印可用分辨率并使用第一个
@@ -2120,7 +2122,8 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
                     target_dir = os.path.join(image_directory_path, today_folder)  # 构建完整存储路径
                     os.makedirs(target_dir, exist_ok=True)  # 自动创建目录
-                    image.save(os.path.join(target_dir, f'{self.exp_id}_{self.order}_{dtime}_{self.count}.jpg'))
+                    if not self.autoFocusFlag:
+                        image.save(os.path.join(target_dir, f'{self.exp_id}_{self.order}_{dtime}_{self.count}.jpg'))
                     mag = int(self.cmb_magnification.currentText())
                     val = int(self.slider_mag.value())
                     self.line_len = mag / 20 * 421 * val / 100
@@ -2135,13 +2138,12 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     # out_image_path2 = os.path.join(image_directory_path, f'{self.exp_id}_{self.order}_{dtime}_{self.count}_mix.jpg')
                     # qimage.save(f'{out_image_path2}')
                     # print(f'save image to {out_image_path2}')
-
-                    image.save(os.path.join(target_dir, f'{self.exp_id}_{self.order}_{dtime}_{self.count}_mix.jpg'))
-                    print(f'save image to {target_dir}')
-
+                    if not self.autoFocusFlag :
+                        image.save(os.path.join(target_dir, f'{self.exp_id}_{self.order}_{dtime}_{self.count}_mix.jpg'))
+                        print(f'save image to {target_dir}')
+                    else:
+                        image.save(os.path.join(target_dir, 'auto_focus.jpg'))
                     self.target_dir = target_dir
-                    image.save(os.path.join(target_dir, 'auto_focus.jpg'))
-
 
     def add_text_to_image(self, image, text, position, size):
         # 创建一个新的QImage对象，内容是原始图像的副本
@@ -2407,7 +2409,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def on_sharpness_calculated(self, sharpness):
         """处理清晰度计算结果"""
-        print(f"当前清晰度: {sharpness:.2f}")
+        # print(f"当前清晰度: {sharpness:.2f}")
         # 可以在这里更新UI显示清晰度
 
     def on_auto_focus_finished(self):
@@ -2496,9 +2498,8 @@ class AutoFocusWorker(QObject):
         self.max_steps = 15  # 减少最大步数
         self.best_sharpness = 0
         self.best_position = 0
-        self.current_direction = -1
-        self.improvement_threshold = 0.01  # 降低阈值
-        self.no_improvement_count = 0
+        self.current_direction = 1
+        self.improvement_threshold = 0.001  # 降低阈值
         self.max_no_improvement = 20
 
         # 使用定时器控制执行节奏
@@ -2514,7 +2515,7 @@ class AutoFocusWorker(QObject):
                 return 0
 
             # 等待文件完全写入
-            time.sleep(0.2)
+            time.sleep(1)
 
             image = cv2.imread(image_path)
             if image is None:
@@ -2546,11 +2547,10 @@ class AutoFocusWorker(QObject):
         self.current_step = 0
         self.best_sharpness = 0
         self.best_position = 0
-        self.current_direction = 0
-        self.no_improvement_count = 0
+        self.current_direction = 1
 
         self.progress.emit("开始自动对焦...")
-        self.timer.start(100)  # 100ms后开始第一步
+        self.timer.start(1000)  # 1s后开始第一步
 
     def stop_auto_focus(self):
         """停止自动对焦"""
@@ -2567,7 +2567,7 @@ class AutoFocusWorker(QObject):
 
         try:
             # 步骤1：拍摄快照（使用自动对焦专用方法）
-            self.progress.emit(f"步骤 {self.current_step + 1}: 拍摄快照...")
+            # self.progress.emit(f"步骤 {self.current_step + 1}: 拍摄快照...")
 
             # 使用自动对焦专用的拍照信号
             self.parent.snap_auto_signal.emit()
@@ -2587,7 +2587,7 @@ class AutoFocusWorker(QObject):
             # 计算清晰度
             sharpness = self.calculate_sharpness(image_dir)
             self.sharpness_calculated.emit(sharpness)
-            self.progress.emit(f"清晰度: {sharpness:.2f}")
+            # self.progress.emit(f"清晰度: {sharpness:.3f}")
 
             # 分析清晰度变化
             self.analyze_sharpness_change(sharpness)
@@ -2599,26 +2599,18 @@ class AutoFocusWorker(QObject):
     def analyze_sharpness_change(self, sharpness):
         """分析清晰度变化并决定下一步动作"""
         try:
+            print(f'当前精度：{sharpness}')
+            print(f'最佳精度：{self.best_sharpness}')
             if self.current_step == 0:
                 self.best_sharpness = sharpness
                 self.best_position = self.current_step
             elif sharpness > self.best_sharpness + self.improvement_threshold:
                 self.best_sharpness = sharpness
                 self.best_position = self.current_step
-                self.no_improvement_count = 0
                 self.progress.emit("清晰度改善")
             elif sharpness < self.best_sharpness - self.improvement_threshold:
                 self.current_direction *= -1
-                self.no_improvement_count += 1
                 self.progress.emit("清晰度下降，改变方向")
-            else:
-                self.no_improvement_count += 1
-
-            # 检查是否应该停止
-            if not self.parent.autoFocusFlag:
-                self.progress.emit(f"连续{self.max_no_improvement}步无改善，停止对焦")
-                self.stop_auto_focus()
-                return
 
             # 执行对焦调整
             self.adjust_focus()
@@ -2640,7 +2632,7 @@ class AutoFocusWorker(QObject):
             self.current_step += 1
 
             # 等待对焦调整完成后继续下一步
-            QTimer.singleShot(1500, self.process_step)  # 增加等待时间
+            QTimer.singleShot(2000, self.process_step)  # 增加等待时间
 
         except Exception as e:
             self.progress.emit(f"调整对焦时出错: {e}")
