@@ -90,7 +90,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.order = None
         self.cfg_file = None
         self.line_len = 0
-        self.default_clean_time = 180 # 默认清洗3分钟
+        self.default_clean_time = 0 # 默认清洗3分钟
         self.counter = self.default_clean_time
         self.startCounting = False
         self.restartFlag = False
@@ -199,6 +199,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def onSetSpeed(self):
         index = self.CBB_focus_speed.currentIndex()
+        print('*'*100, index)
         if index == 0:
             self.focus_velocity = 1
         if index == 1:
@@ -1740,6 +1741,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
                     action = menu.exec(self.btn_snap.mapToGlobal(QPoint(0, self.btn_snap.height())))
                     if action:  # 确保用户选择了分辨率
                         self.hcam.Snap(action.data())
+                self.autoFocusFlag =True
             except Exception as e:
                 print(f'{e}')
 
@@ -2405,6 +2407,12 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def on_auto_focus_progress(self, message):
         """处理自动对焦进度信息"""
         print(f"自动对焦: {message}")
+        start = time.time()
+        self.focus_worker.move_up(10)
+        end = time.time()
+        print('Focus once time: {}.'.format(end-start))
+        time.sleep(5)
+
         # 可以在这里更新UI显示进度
 
     def on_sharpness_calculated(self, sharpness):
@@ -2499,7 +2507,7 @@ class AutoFocusWorker(QObject):
         self.best_sharpness = 0
         self.best_position = 0
         self.current_direction = 1
-        self.improvement_threshold = 0.001  # 降低阈值
+        self.improvement_threshold = 0.01  # 降低阈值
         self.max_no_improvement = 20
 
         # 使用定时器控制执行节奏
