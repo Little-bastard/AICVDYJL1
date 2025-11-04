@@ -142,6 +142,14 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.auto_focus_max = 7
         self.auto_focus_timer = None
 
+        # a/b/c 参数：
+        # a 表示前 a 个循环使用步长 b，之后的循环使用步长 c
+        # 每个循环内固定拍 self.auto_focus_max 次（默认 7 次）
+        self.auto_focus_a = 3  # 默认前 3 个循环使用 b
+        self.auto_focus_b = 50 * 20  # 默认使用当前 focus_velocity
+        self.auto_focus_c = 10 * 20  # 默认使用当前 focus_velocity
+        self.auto_focus_cycle_count = 0  # 已完成循环计数
+
         # 初始化自动对焦工作器
         self.auto_focus_worker = AutoFocusWorker(self)
 
@@ -152,9 +160,13 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.focus_down_signal.connect(self.onFocusDown)
 
         # 连接自动对焦信号
-        self.auto_focus_worker.progress.connect(self.on_auto_focus_progress)
-        self.auto_focus_worker.sharpness_calculated.connect(self.on_sharpness_calculated)
-        self.auto_focus_worker.finished.connect(self.on_auto_focus_finished)
+        # self.auto_focus_worker.progress.connect(self.on_auto_focus_progress)
+        # self.auto_focus_worker.sharpness_calculated.connect(self.on_sharpness_calculated)
+        # self.auto_focus_worker.finished.connect(self.on_auto_focus_finished)
+
+        # 实验位移边界控制
+        self.experiment_focus_origin = None
+        self.experiment_running = False
 
     def onConnectFocus(self):
         if self.focus_worker:
@@ -352,11 +364,23 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.IsLaunched = False
         self.BT_launch_experiment.setText("启动实验")
         print(f'停止实验')
+        # 清理实验运行标志与位移边界基准
+        self.experiment_running = False
+        self.experiment_focus_origin = None
+
         # 更新任务进度管理表
         self.updateTaskTable("task_status", "停止中")
 
     def start_experiment(self):
         try:
+            # 记录显微镜当前位置作为实验基准位置，并开启实验运行标志
+            try:
+                if self.focus_worker:
+                    self.experiment_focus_origin = self.focus_worker.get_position()
+                    self.experiment_running = True
+                    print(f'实验基准位置记录: {self.experiment_focus_origin}')
+            except Exception as pos_err:
+                print(f'获取显微镜当前位置失败: {pos_err}')
             # 获取实验跟踪信息：配置文件名和当前轮次
             with open(f'{config_directory_path}/profile.json', 'r', encoding='utf-8') as profile:
                 current_profile = json.load(profile)
@@ -446,7 +470,7 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
                     # 创建并启动定时器
                     self.auto_focus_timer = QTimer(self)
-                    self.auto_focus_timer.setInterval(15000)  # 10秒
+                    self.auto_focus_timer.setInterval(1000)
                     self.auto_focus_timer.timeout.connect(self.on_auto_focus_timer_tick)
                     self.auto_focus_timer.start()
                     print('已启动自动对焦定时器，每10秒触发一次移动与快照。')
@@ -464,10 +488,43 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def on_auto_focus_timer_tick(self):
         """定时器回调：每次按固定步长移动并保存顺序编号快照"""
         try:
-            # 移动显微镜
-            if self.focus_worker and self.focus_velocity is not None:
-                self.focus_worker.move_up(self.focus_velocity)
 
+            pos = float(self.focus_worker.get_position())
+            print(f"当前位置： {pos}")
+            # 移动显微镜
+            # 根据已完成的循环数选择步长：前 a 个循环用 b，之后用 c
+            cycles_using_b = getattr(self, 'auto_focus_a', 0)
+            current_cycle_index = (getattr(self, 'auto_focus_cycle_count', 0) or 0) + 1
+            inner_step = getattr(self, 'auto_focus_b', None)
+            outer_step = getattr(self, 'auto_focus_c', None)
+            # 默认回退到 focus_velocity
+            if inner_step is None:
+                inner_step = self.focus_velocity
+            if outer_step is None:
+                outer_step = self.focus_velocity
+            step = inner_step if current_cycle_index <= cycles_using_b else outer_step
+            if self.focus_worker and step is not None:
+                # 计算本次意图位移（当前实现为负值：向下）
+                intended = step * -1
+                # 若实验正在运行且有基准位置，进行边界约束
+                if getattr(self, 'experiment_running', False) and getattr(self, 'experiment_focus_origin',
+                                                                          None) is not None and pos is not None:
+                    origin = float(self.experiment_focus_origin)
+                    print(f"初始位置： {origin}")
+                    # 要求：pos 与 origin 相差 500 以上则停止移动
+                    if abs(pos - origin) >= 500:
+                        print('当前位置已超出±500边界，取消本次定时器移动。')
+                    else:
+                        next_pos = pos + intended
+                        print(f"intended： {intended}")
+                        print(f"next_pos： {next_pos}")
+                        if abs(next_pos - origin) > 500:
+                            print('本次移动将导致超出±500边界，取消本次定时器移动。')
+                        else:
+                            self.focus_worker.move_up(intended)
+                else:
+                    self.focus_worker.move_up(intended)
+                
             # 保存快照
             if self.hcam and self.pData is not None and hasattr(self, 'auto_focus_dir'):
                 image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
@@ -475,15 +532,34 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 image.save(filename)
                 print(f'save snapshot to {filename}')
 
-                # 更新计数并判断是否停止
+                # 更新计数并判断是否重置循环
                 self.auto_focus_counter += 1
                 if hasattr(self, 'auto_focus_max') and self.auto_focus_counter > self.auto_focus_max:
-                    if hasattr(self, 'auto_focus_timer') and self.auto_focus_timer:
-                        self.auto_focus_timer.stop()
-                    print('自动对焦定时器完成7次快照，已停止。')
-                    search_once(3, 10)
+                    # 先调用自动对焦分析
+                    try:
+                        print('开始执行自动对焦分析：search_once(3, 10)')
+                        dis = search_once(3, 1)
+                        self.focus_worker.move_up(dis * 20)
+                        print(f'距离: {dis}')
+                        print('自动对焦分析完成。')
+                    except Exception as s_err:
+                        print(f'自动对焦分析(search_once)执行失败: {s_err}')
+                    # 再清空文件夹内图片
+                    try:
+                        for f in os.listdir(self.auto_focus_dir):
+                            fp = os.path.join(self.auto_focus_dir, f)
+                            if os.path.isfile(fp) and f.lower().endswith('.jpg'):
+                                os.remove(fp)
+                        print('已清空自动对焦文件夹中的图片。')
+                    except Exception as del_err:
+                        print(f'清空自动对焦图片失败: {del_err}')
+                    # 完成一个循环：更新循环计数
+                    self.auto_focus_cycle_count = (getattr(self, 'auto_focus_cycle_count', 0) or 0) + 1
+                    # 重置计数，继续循环
+                    self.auto_focus_counter = 1
         except Exception as e:
             print(f'自动对焦定时器操作失败: {e}')
+            traceback.print_exc()
 
     def onRunAll(self):
         # 显微镜切换回原来的分辨率
@@ -2462,11 +2538,11 @@ class AICVD(QMainWindow, Ui_MainWindow):
 
     def startAutoFocus(self):
         """开始自动对焦"""
-        self.auto_focus_worker.start_auto_focus()
+        # self.auto_focus_worker.start_auto_focus()
 
     def stopAutoFocus(self):
         """停止自动对焦"""
-        self.auto_focus_worker.stop_auto_focus()
+        # self.auto_focus_worker.stop_auto_focus()
 
     def on_auto_focus_progress(self, message):
         """处理自动对焦进度信息"""
@@ -2575,9 +2651,9 @@ class AutoFocusWorker(QObject):
         self.max_no_improvement = 20
 
         # 使用定时器控制执行节奏
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.process_step)
-        self.timer.setSingleShot(True)
+        # self.timer = QTimer()
+        # self.timer.timeout.connect(self.process_step)
+        # self.timer.setSingleShot(True)
 
     def calculate_sharpness(self, image_path):
         """计算图片清晰度，增加错误处理"""

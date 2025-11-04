@@ -10,7 +10,7 @@ from scipy.optimize import curve_fit
 class SimulateData:
     def __init__(self):
         # 图像数据路径（相对 code 目录）
-        self.data_path = '../data/imgs'
+        self.data_path = './autoFocus'
 
         # 收集可用的帧索引（文件名为数字）
         files = glob.glob(os.path.join(self.data_path, '*.jpg'))
@@ -50,6 +50,7 @@ def sobel(img):
     sobelx = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)
     sobely = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)
     sobel_score = np.mean(sobelx**2 + sobely**2).item()
+    print(f"图像评分： {sobel_score}")
     return sobel_score
 
 
@@ -121,24 +122,30 @@ def dynamic_focu_search(search_num, step_distance):
 
     return (focus_x, clarity_score)
 
-def search_once(search_num=3, step_distance=24):
-    global sd
-    sd = SimulateData()
+def search_once(search_num, step_distance):
+    try:
+        print(f'search_num: {search_num}')
+        print(f'step_distance: {step_distance}')
+        global sd
+        sd = SimulateData()
 
-    selected_focus = dynamic_focu_search(
-        search_num=search_num,
-        step_distance=step_distance,
-    )
+        selected_focus = dynamic_focu_search(
+            search_num=search_num,
+            step_distance=step_distance,
+        )
 
-    # 拟合高斯曲线，返回最佳值
-    best_focus_x = fit_gaussian_from_focus(selected_focus)
-    best_focus_distance = best_focus_x - search_num * step_distance
+        # 拟合高斯曲线，返回最佳值
+        best_focus_x = fit_gaussian_from_focus(selected_focus)
+        best_focus_distance = best_focus_x - search_num * step_distance
 
 
-    # 摄像头当前位置移动best_focus_distance距离（有正负之分，表示两个方向）到达最佳焦距，对焦完成
-    sd.move(best_focus_distance)
+        # 摄像头当前位置移动best_focus_distance距离（有正负之分，表示两个方向）到达最佳焦距，对焦完成
+        sd.move(best_focus_distance)
 
-    print('Best Focus:', sd.cur_idx)
+        print('Best Focus:', sd.cur_idx)
+    except Exception as e:
+        print(e)
+        traceback.print_exc()
     return best_focus_distance
 
 sd = None
