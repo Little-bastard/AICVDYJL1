@@ -36,6 +36,7 @@ from program.MicroscopeDev.ImageLabel import DrawableLabel
 from program.TaskManagement.TaskManager import TaskManagerTableDialog
 from program.TempCtrlDev.TempWindow import TempProgramTableDialog, TempWorker, TempInputData
 from program.Ui_MainWindow import Ui_MainWindow
+from program.autoFocus import search_once
 from program.robotControl.RobotWindow import WebEngineView
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -134,6 +135,12 @@ class AICVD(QMainWindow, Ui_MainWindow):
         self.original_auto_focus_flag = None
         self.auto_focus_thread = None
         self.target_dir = None
+
+        # 启动实验自动快照定时器相关默认值
+        self.auto_focus_dir = None
+        self.auto_focus_counter = 0
+        self.auto_focus_max = 7
+        self.auto_focus_timer = None
 
         # 初始化自动对焦工作器
         self.auto_focus_worker = AutoFocusWorker(self)
@@ -324,6 +331,16 @@ class AICVD(QMainWindow, Ui_MainWindow):
     def stop_experiment(self):
         # 停止录像
         self.stop_recording()
+        # 停止并清理自动对焦定时器
+        try:
+            if hasattr(self, 'auto_focus_timer') and self.auto_focus_timer:
+                self.auto_focus_timer.stop()
+                self.auto_focus_timer = None
+            # 重置计数器与目录
+            self.auto_focus_counter = 0
+            self.auto_focus_dir = None
+        except Exception as e:
+            print(f'停止自动对焦定时器失败: {e}')
         # 停止温控
         self.onStopA()
         self.onStopB()
@@ -412,6 +429,29 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 # 清洗MFC
                 self.cleanMFC()
                 print(f'启动实验')
+                # 确保同级目录存在 autoFocus 文件夹
+                auto_focus_dir = os.path.join(BASE_DIR, 'autoFocus')
+                if not os.path.isdir(auto_focus_dir):
+                    os.makedirs(auto_focus_dir, exist_ok=True)
+                # 使用定时器每10秒触发一次：移动显微镜并拍摄快照保存到 autoFocus
+                try:
+                    # 保存目录与计数器为类属性，便于回调使用
+                    self.auto_focus_dir = auto_focus_dir
+                    self.auto_focus_counter = 1
+                    self.auto_focus_max = 7
+
+                    # 若已有定时器则先停止
+                    if hasattr(self, 'auto_focus_timer') and self.auto_focus_timer:
+                        self.auto_focus_timer.stop()
+
+                    # 创建并启动定时器
+                    self.auto_focus_timer = QTimer(self)
+                    self.auto_focus_timer.setInterval(15000)  # 10秒
+                    self.auto_focus_timer.timeout.connect(self.on_auto_focus_timer_tick)
+                    self.auto_focus_timer.start()
+                    print('已启动自动对焦定时器，每10秒触发一次移动与快照。')
+                except Exception as e:
+                    print(f'启动实验自动对焦定时器失败: {e}')
                 self.updateTaskTable("progress", "0%")
                 self.updateTaskTable("task_status", "进行中")
                 # 测试用
@@ -420,6 +460,30 @@ class AICVD(QMainWindow, Ui_MainWindow):
         except Exception as e:
             self.updateTaskTable("task_status", "实验执行异常")
             print(e)
+
+    def on_auto_focus_timer_tick(self):
+        """定时器回调：每次按固定步长移动并保存顺序编号快照"""
+        try:
+            # 移动显微镜
+            if self.focus_worker and self.focus_velocity is not None:
+                self.focus_worker.move_up(self.focus_velocity)
+
+            # 保存快照
+            if self.hcam and self.pData is not None and hasattr(self, 'auto_focus_dir'):
+                image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
+                filename = os.path.join(self.auto_focus_dir, f"{self.auto_focus_counter}.jpg")
+                image.save(filename)
+                print(f'save snapshot to {filename}')
+
+                # 更新计数并判断是否停止
+                self.auto_focus_counter += 1
+                if hasattr(self, 'auto_focus_max') and self.auto_focus_counter > self.auto_focus_max:
+                    if hasattr(self, 'auto_focus_timer') and self.auto_focus_timer:
+                        self.auto_focus_timer.stop()
+                    print('自动对焦定时器完成7次快照，已停止。')
+                    search_once(3, 10)
+        except Exception as e:
+            print(f'自动对焦定时器操作失败: {e}')
 
     def onRunAll(self):
         # 显微镜切换回原来的分辨率
