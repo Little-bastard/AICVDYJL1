@@ -35,6 +35,7 @@ class SimulateData:
         # 运动后进行钳制，防止越界导致读不到图像
         self.cur_idx = max(self.min_idx, min(self.max_idx, self.cur_idx + distance))
 
+
     def get_img(self):
         img_path = '{}/{}.jpg'.format(self.data_path, self.cur_idx)
         gray_img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
@@ -103,6 +104,9 @@ def dynamic_focu_search(search_num, step_distance):
     # 输出：搜索到的不同焦距对应点
     # 后续改进：清晰度分数对应索引不应在采集点边缘（保证图像质量特征峰值（最佳焦距）包含在了搜索范围内）
 
+    # distances = [-search_num * step_distance] + [step_distance] * (search_num * 2)
+    # focus_x = range(-search_num * step_distance, search_num * step_distance + 1, step_distance)
+
     distances = [-search_num * step_distance] + [step_distance] * (search_num * 2)
     focus_x = range(-search_num * step_distance, search_num * step_distance + 1, step_distance)
 
@@ -121,6 +125,28 @@ def dynamic_focu_search(search_num, step_distance):
     clarity_score = np.array(clarity_score)
 
     return (focus_x, clarity_score)
+
+    # distances = [0] + [-1 * step_distance] * 2 * search_num
+    # focus_x = [-1*i*step_distance for i in range(search_num * 2 + 1)]
+    #
+    # # print('Distance:' * 10, distances)
+    # # print('Focus:' * 10, focus_x)
+    #
+    # clarity_score = []
+    # for distance in distances:
+    #     # move + - 分别表示两个方向
+    #     sd.move(distance)
+    #
+    #     # get img 获取当前摄像头对应的图像
+    #     gray_img = sd.get_img()
+    #
+    #     # get sobel score
+    #     clarity_score += [sobel(gray_img)]
+    #
+    # focus_x = np.array(focus_x)
+    # clarity_score = np.array(clarity_score)
+    #
+    # return (focus_x, clarity_score)
 
 def search_once(search_num, step_distance):
     try:
@@ -146,7 +172,7 @@ def search_once(search_num, step_distance):
     except Exception as e:
         print(e)
         traceback.print_exc()
-    return best_focus_distance
+    return best_focus_distance + search_num * step_distance * 2
 
 sd = None
 

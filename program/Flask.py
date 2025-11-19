@@ -7,8 +7,8 @@ import pandas as pd
 from PyQt5.QtCore import pyqtSignal, QThread
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from flask import Flask, jsonify, request, send_file, make_response
-from werkzeug.utils  import safe_join
 from flask_cors import CORS
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 task_management_path = os.path.join(BASE_DIR, 'TaskManagement')
 exp_config_path = os.path.join(BASE_DIR, 'config', 'exp_config')
@@ -43,9 +43,9 @@ class FlaskThread(QThread):
             try:
                 exp_id = request.args.get('experiment_id')
                 dataStr = request.json
-                print(f'Received data:', dataStr)
-                data = json.loads(dataStr)
-                df = pd.DataFrame(data)
+                # print(f'Received data:', dataStr)
+                # data = json.loads(dataStr)
+                df = pd.DataFrame(dataStr)
                 filepath = os.path.join(exp_config_path, f'{exp_id}.xlsx')
                 df.to_excel(filepath, index=False)
                 self.set_parameters_signal.emit(exp_id)

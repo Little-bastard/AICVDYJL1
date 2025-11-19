@@ -8,6 +8,7 @@ import traceback
 from datetime import datetime, time as dt_time
 from pathlib import Path
 from typing import Union
+from PIL import Image
 
 import cv2
 import modbus_tk.defines as cst
@@ -16,7 +17,7 @@ import pandas as pd
 import qdarktheme
 import serial
 from PyQt5.QtCore import QTimer, QSignalBlocker, Qt, pyqtSignal, QUrl, QCoreApplication, QPoint, QLineF, QSize, QTime, \
-    QObject
+    QObject, QEventLoop
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QPen, QFont, QColor
 from PyQt5.QtWidgets import (QMainWindow, QMessageBox, QMenu, QAction, QApplication, QDialog, QFileDialog,
                              QTreeWidgetItem, QLabel, QToolBar, QPushButton, QLineEdit, QButtonGroup, QRadioButton,
@@ -36,8 +37,12 @@ from program.MicroscopeDev.ImageLabel import DrawableLabel
 from program.TaskManagement.TaskManager import TaskManagerTableDialog
 from program.TempCtrlDev.TempWindow import TempProgramTableDialog, TempWorker, TempInputData
 from program.Ui_MainWindow import Ui_MainWindow
-from program.autoFocus import search_once
+# from program.autoFocus import search_once
 from program.robotControl.RobotWindow import WebEngineView
+
+from scipy.optimize import curve_fit
+# from sklearn.gaussian_process import GaussianProcessRegressor
+# from sklearn.gaussian_process.kernels import RBF, WhiteKernel, ConstantKernel
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 config_directory_path = os.path.join(BASE_DIR, 'config')
@@ -167,6 +172,9 @@ class AICVD(QMainWindow, Ui_MainWindow):
         # 实验位移边界控制
         self.experiment_focus_origin = None
         self.experiment_running = False
+
+        self.yy_focus_step = 200  # 自动对焦移动步长设置
+        self.yy_focus_num = 3  # 步长
 
     def onConnectFocus(self):
         if self.focus_worker:
@@ -453,29 +461,32 @@ class AICVD(QMainWindow, Ui_MainWindow):
                 # 清洗MFC
                 self.cleanMFC()
                 print(f'启动实验')
-                # 确保同级目录存在 autoFocus 文件夹
-                auto_focus_dir = os.path.join(BASE_DIR, 'autoFocus')
-                if not os.path.isdir(auto_focus_dir):
-                    os.makedirs(auto_focus_dir, exist_ok=True)
-                # 使用定时器每10秒触发一次：移动显微镜并拍摄快照保存到 autoFocus
-                try:
-                    # 保存目录与计数器为类属性，便于回调使用
-                    self.auto_focus_dir = auto_focus_dir
-                    self.auto_focus_counter = 1
-                    self.auto_focus_max = 7
+                self.yy_focus()
 
-                    # 若已有定时器则先停止
-                    if hasattr(self, 'auto_focus_timer') and self.auto_focus_timer:
-                        self.auto_focus_timer.stop()
 
-                    # 创建并启动定时器
-                    self.auto_focus_timer = QTimer(self)
-                    self.auto_focus_timer.setInterval(1000)
-                    self.auto_focus_timer.timeout.connect(self.on_auto_focus_timer_tick)
-                    self.auto_focus_timer.start()
-                    print('已启动自动对焦定时器，每10秒触发一次移动与快照。')
-                except Exception as e:
-                    print(f'启动实验自动对焦定时器失败: {e}')
+                # # 确保同级目录存在 autoFocus 文件夹
+                # auto_focus_dir = os.path.join(BASE_DIR, 'autoFocus')
+                # if not os.path.isdir(auto_focus_dir):
+                #     os.makedirs(auto_focus_dir, exist_ok=True)
+                # # 使用定时器每10秒触发一次：移动显微镜并拍摄快照保存到 autoFocus
+                # try:
+                #     # 保存目录与计数器为类属性，便于回调使用
+                #     self.auto_focus_dir = auto_focus_dir
+                #     self.auto_focus_counter = 1
+                #     self.auto_focus_max = 7
+                #
+                #     # 若已有定时器则先停止
+                #     if hasattr(self, 'auto_focus_timer') and self.auto_focus_timer:
+                #         self.auto_focus_timer.stop()
+                #
+                #     # 创建并启动定时器
+                #     self.auto_focus_timer = QTimer(self)
+                #     self.auto_focus_timer.setInterval(10000)
+                #     self.auto_focus_timer.timeout.connect(self.on_auto_focus_timer_tick)
+                #     self.auto_focus_timer.start()
+                #     print('已启动自动对焦定时器，每10秒触发一次移动与快照。')
+                # except Exception as e:
+                #     print(f'启动实验自动对焦定时器失败: {e}')
                 self.updateTaskTable("progress", "0%")
                 self.updateTaskTable("task_status", "进行中")
                 # 测试用
@@ -485,81 +496,174 @@ class AICVD(QMainWindow, Ui_MainWindow):
             self.updateTaskTable("task_status", "实验执行异常")
             print(e)
 
-    def on_auto_focus_timer_tick(self):
-        """定时器回调：每次按固定步长移动并保存顺序编号快照"""
-        try:
+    def yy_none(self):
+        None
 
-            pos = float(self.focus_worker.get_position())
-            print(f"当前位置： {pos}")
-            # 移动显微镜
-            # 根据已完成的循环数选择步长：前 a 个循环用 b，之后用 c
-            cycles_using_b = getattr(self, 'auto_focus_a', 0)
-            current_cycle_index = (getattr(self, 'auto_focus_cycle_count', 0) or 0) + 1
-            inner_step = getattr(self, 'auto_focus_b', None)
-            outer_step = getattr(self, 'auto_focus_c', None)
-            # 默认回退到 focus_velocity
-            if inner_step is None:
-                inner_step = self.focus_velocity
-            if outer_step is None:
-                outer_step = self.focus_velocity
-            step = inner_step if current_cycle_index <= cycles_using_b else outer_step
-            if self.focus_worker and step is not None:
-                # 计算本次意图位移（当前实现为负值：向下）
-                intended = step * -1
-                # 若实验正在运行且有基准位置，进行边界约束
-                if getattr(self, 'experiment_running', False) and getattr(self, 'experiment_focus_origin',
-                                                                          None) is not None and pos is not None:
-                    origin = float(self.experiment_focus_origin)
-                    print(f"初始位置： {origin}")
-                    # 要求：pos 与 origin 相差 500 以上则停止移动
-                    if abs(pos - origin) >= 500:
-                        print('当前位置已超出±500边界，取消本次定时器移动。')
-                    else:
-                        next_pos = pos + intended
-                        print(f"intended： {intended}")
-                        print(f"next_pos： {next_pos}")
-                        if abs(next_pos - origin) > 500:
-                            print('本次移动将导致超出±500边界，取消本次定时器移动。')
-                        else:
-                            self.focus_worker.move_up(intended)
-                else:
-                    self.focus_worker.move_up(intended)
-                
+    def yy_focus(self):
+        # 确保同级目录存在 autoFocus 文件夹
+        auto_focus_dir = os.path.join(BASE_DIR, 'autoFocus')
+        if not os.path.isdir(auto_focus_dir):
+            os.makedirs(auto_focus_dir, exist_ok=True)
+        # 使用定时器每10秒触发一次：移动显微镜并拍摄快照保存到 autoFocus
+        try:
+            auto_focus_dir = os.path.join(BASE_DIR, 'autoFocus')
+            if not os.path.isdir(auto_focus_dir):
+                os.makedirs(auto_focus_dir, exist_ok=True)
+            # 使用定时器每10秒触发一次：移动显微镜并拍摄快照保存到 autoFocus
+            # 保存目录与计数器为类属性，便于回调使用
+            self.auto_focus_dir = auto_focus_dir
+            self.auto_focus_counter = 1
+            self.auto_focus_max = 7
+
+            # 若已有定时器则先停止
+            if hasattr(self, 'auto_focus_timer') and self.auto_focus_timer:
+                self.auto_focus_timer.stop()
+
+            # 创建并启动定时器
+            self.auto_focus_timer = QTimer(self)
+            self.auto_focus_timer.setInterval(15000)
+            self.auto_focus_timer.timeout.connect(lambda : self.on_auto_focus_timer_tick(self.yy_focus_num,self.yy_focus_step))
+            self.auto_focus_timer.start()
+            print('已启动自动对焦定时器，每10秒触发一次移动与快照。')
+        except Exception as e:
+            print(f'启动实验自动对焦定时器失败: {e}')
+
+    def on_auto_focus_timer_tick(self, search_num, step_distance):  # 取点和步长
+        # distances = [-search_num * step_distance] + [step_distance] * (search_num * 2)
+        focus_x = range(-search_num * step_distance, search_num * step_distance + 1, step_distance)
+
+
+        clarity_score = []
+        move_distance = [-3 * self.yy_focus_step, self.yy_focus_step, self.yy_focus_step, self.yy_focus_step, self.yy_focus_step, self.yy_focus_step, self.yy_focus_step ]
+
+
+        for i in range(0,search_num * 2+1): # 取七张图片
+            loop = QEventLoop()
+            """定时器回调：每次按固定步长移动并保存顺序编号快照"""
+            try:
+                # 每次移动20个单位距离
+                self.focus_worker.move_up(move_distance[i])  #以起始点为原点上下寻样拍照
+
+
+                # 如果显微镜已经移动，使用定时器延迟执行保存快照
+                # 延迟时间设置为1000毫秒（1秒），可以根据实际需要调整
+                QTimer.singleShot(800, lambda:(self.yy_none(), loop.quit()))
+                loop.exec_()
+                gray_img = self.save_snapshot()
+                QTimer.singleShot(10, lambda: (self.yy_none(), loop.quit()))
+                loop.exec_()
+
+                clarity_score += [self.sobel(gray_img)]
+
+            except Exception as e:
+                print(f'自动对焦定时器操作失败: {e}')
+                traceback.print_exc()
+
+        focus_x = np.array(focus_x)
+        clarity_score = np.array(clarity_score)
+
+        selected_focus = (focus_x, clarity_score)
+
+        # 拟合高斯曲线，返回最佳值
+        best_focus_x = self.fit_gaussian_from_focus(selected_focus)
+        best_focus_distance = best_focus_x - search_num * step_distance
+        print(f"最佳位点：{best_focus_distance}")
+
+
+
+        # 摄像头当前位置移动best_focus_distance距离（有正负之分，表示两个方向）到达最佳焦距，对焦完成
+        self.focus_worker.move_up(best_focus_distance)
+        QTimer.singleShot(1000, lambda: (self.yy_none(), loop.quit()))
+        gray_img = self.save_snapshot()
+        yy_soc = self.sobel(gray_img)
+        print(f"图像评分：{yy_soc}")
+
+        print("对焦成功")
+
+
+    def save_snapshot(self):
+        """保存快照并处理计数器和循环逻辑"""
+        try:
             # 保存快照
             if self.hcam and self.pData is not None and hasattr(self, 'auto_focus_dir'):
-                image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
-                filename = os.path.join(self.auto_focus_dir, f"{self.auto_focus_counter}.jpg")
-                image.save(filename)
-                print(f'save snapshot to {filename}')
+                # 获取当前年月日并格式化为字符串
+                current_date = datetime.now().strftime("%Y%m%d")
+                # 获取当前时分秒并格式化为字符串
+                current_time = datetime.now().strftime("%H%M%S")
 
-                # 更新计数并判断是否重置循环
+                # 创建完整的文件路径，文件名以时分秒开头
+                filename = os.path.join(self.auto_focus_dir, current_date,
+                                        f"{current_time}-{self.auto_focus_counter}.jpg")
+
+                # 确保目录存在
+                os.makedirs(os.path.dirname(filename), exist_ok=True)
+
+                image = QImage(self.pData, self.imgWidth, self.imgHeight, QImage.Format_RGB888)
+                image.save(filename)
+                gray_img = np.array(Image.open(filename).convert('L'))
+
                 self.auto_focus_counter += 1
-                if hasattr(self, 'auto_focus_max') and self.auto_focus_counter > self.auto_focus_max:
-                    # 先调用自动对焦分析
-                    try:
-                        print('开始执行自动对焦分析：search_once(3, 10)')
-                        dis = search_once(3, 1)
-                        self.focus_worker.move_up(dis * 20)
-                        print(f'距离: {dis}')
-                        print('自动对焦分析完成。')
-                    except Exception as s_err:
-                        print(f'自动对焦分析(search_once)执行失败: {s_err}')
-                    # 再清空文件夹内图片
-                    try:
-                        for f in os.listdir(self.auto_focus_dir):
-                            fp = os.path.join(self.auto_focus_dir, f)
-                            if os.path.isfile(fp) and f.lower().endswith('.jpg'):
-                                os.remove(fp)
-                        print('已清空自动对焦文件夹中的图片。')
-                    except Exception as del_err:
-                        print(f'清空自动对焦图片失败: {del_err}')
-                    # 完成一个循环：更新循环计数
-                    self.auto_focus_cycle_count = (getattr(self, 'auto_focus_cycle_count', 0) or 0) + 1
-                    # 重置计数，继续循环
-                    self.auto_focus_counter = 1
+                print(f'save snapshot to {filename} {time.time()}')
         except Exception as e:
-            print(f'自动对焦定时器操作失败: {e}')
+            print(f'保存快照操作失败: {e}')
             traceback.print_exc()
+
+        return gray_img
+
+    def sobel(self, img):
+        # 功能：Sobel算子通过计算图像的水平和垂直梯度来检测边缘，进而评估图像的清晰度，边缘越明显，图像质量越高。
+        # 输入：np.array 格式的彩色图像*1
+        # 输出：图像对应的Sobel分数
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        sobelx = cv2.Sobel(img, cv2.CV_64F, 1, 0, ksize=3)
+        sobely = cv2.Sobel(img, cv2.CV_64F, 0, 1, ksize=3)
+        sobel_score = np.mean(sobelx ** 2 + sobely ** 2).item()
+        print(f"图像评分： {sobel_score}")
+        return sobel_score
+
+    def gaussian(self, x, A, B, mu, sigma):
+        # 高斯曲线
+        return A * np.exp(-((x - mu) ** 2) / (2 * sigma ** 2)) + B
+
+    def fit_gaussian_from_focus(self, focus):
+        """
+        功能：拟合单峰高斯曲线
+        输入: focus （x, y）
+        输出: 拟合函数 f(x), 参数 (A, mu, sigma)
+        """
+        x_data, y_data = focus
+
+        # print(x_data)
+        # print(y_data)
+
+        if np.any(y_data <= 0):
+            raise ValueError("y值必须为正数")
+
+        # 初始猜测参数：A=max(y), mu=x 对应最大 y, sigma=1
+        idx_max = np.argmax(y_data)
+        idx_min = np.argmin(y_data)
+        A0 = y_data[idx_max]
+        B0 = x_data[idx_min]
+        mu0 = x_data[idx_max]
+        sigma0 = (np.max(x_data) - np.min(x_data)) / 2
+        p0 = [A0, B0, mu0, sigma0]
+
+        # 拟合高斯曲线
+        weights = 1 / (abs(x_data - mu0) + 1e-3)
+
+        popt, _ = curve_fit(
+            self.gaussian, x_data, y_data, p0=p0,
+            bounds=([0, -np.inf, np.min(x_data), 1e-6], [np.inf, np.inf, np.max(x_data), max(x_data) - min(x_data)]),
+            maxfev=10000,
+        )
+
+        A_fit, B_fit, mu_fit, sigma_fit = popt
+        # f = lambda x: gaussian(x, A_fit, B_fit, mu_fit, sigma_fit)
+
+        return mu_fit
+
+
+
 
     def onRunAll(self):
         # 显微镜切换回原来的分辨率
